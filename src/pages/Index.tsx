@@ -72,15 +72,7 @@ const Index = () => {
           onDataChange={setAuditData}
         />
 
-        {/* Quick Access to Domain Checkup */}
-        <div className="mb-6">
-          <Link to="/domain-checkup">
-            <Button variant="outline" size="lg" className="w-full audit-card hover:scale-[1.02] transition-transform">
-              <Globe className="h-5 w-5 mr-2" />
-              Need a Quick Domain Analysis? Try Our Domain Checkup Tool
-            </Button>
-          </Link>
-        </div>
+        {/* Quick Access to Domain Checkup - Remove since we have header nav now */}
 
         <ProgressBar
           totalItems={totalItems}
