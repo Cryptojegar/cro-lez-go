@@ -146,7 +146,7 @@ export const PDFGenerator = ({ auditData, sections }: PDFGeneratorProps) => {
       for (let sectionIndex = 0; sectionIndex < sections.length; sectionIndex++) {
         const section = sections[sectionIndex];
         pdf.addPage();
-        sectionPages[sectionIndex] = pdf.internal.getNumberOfPages();
+        sectionPages[sectionIndex] = pdf.getNumberOfPages();
         drawPageHeader(section, sectionIndex);
         
         let currentY = 35;
@@ -319,7 +319,7 @@ export const PDFGenerator = ({ auditData, sections }: PDFGeneratorProps) => {
         }
       });
 
-      const totalPages = pdf.internal.getNumberOfPages();
+      const totalPages = pdf.getNumberOfPages();
       for (let i = 2; i <= totalPages; i++) {
         pdf.setPage(i);
         pdf.setFont('helvetica', 'normal');
