@@ -1,9 +1,12 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { AuditHeader } from "@/components/audit/AuditHeader";
 import { ProgressBar } from "@/components/audit/ProgressBar";
 import { AuditSection } from "@/components/audit/AuditSection";
 import { PDFGenerator } from "@/components/audit/PDFGenerator";
 import { auditSections, AuditItem } from "@/data/auditSections";
+import { Button } from "@/components/ui/button";
+import { Globe } from "lucide-react";
 
 const Index = () => {
   const [auditData, setAuditData] = useState({
@@ -68,6 +71,16 @@ const Index = () => {
           auditData={auditData}
           onDataChange={setAuditData}
         />
+
+        {/* Quick Access to Domain Checkup */}
+        <div className="mb-6">
+          <Link to="/domain-checkup">
+            <Button variant="outline" size="lg" className="w-full audit-card hover:scale-[1.02] transition-transform">
+              <Globe className="h-5 w-5 mr-2" />
+              Need a Quick Domain Analysis? Try Our Domain Checkup Tool
+            </Button>
+          </Link>
+        </div>
 
         <ProgressBar
           totalItems={totalItems}
