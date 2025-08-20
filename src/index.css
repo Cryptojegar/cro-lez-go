@@ -1,0 +1,148 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* CRO Audit Design System - Professional Dark Theme with Bright Yellow Accents */
+
+@layer base {
+  :root {
+    /* Dark charcoal base theme */
+    --background: 0 0% 18%; /* #2E2E2E */
+    --foreground: 0 0% 98%;
+
+    --card: 0 0% 21%; /* Slightly lighter than background */
+    --card-foreground: 0 0% 98%;
+
+    --popover: 0 0% 16%; /* Darker for depth */
+    --popover-foreground: 0 0% 98%;
+
+    /* Bright yellow accent system */
+    --primary: 55 100% 52%; /* #FFE009 */
+    --primary-foreground: 0 0% 4%;
+
+    --secondary: 0 0% 25%; /* Medium gray */
+    --secondary-foreground: 0 0% 98%;
+
+    --muted: 0 0% 22%;
+    --muted-foreground: 0 0% 65%;
+
+    --accent: 55 100% 52%; /* #FFE009 */
+    --accent-foreground: 0 0% 4%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 0 0% 32%; /* Subtle borders */
+    --input: 0 0% 25%; /* Input backgrounds */
+    --ring: 55 100% 52%; /* Yellow focus rings */
+
+    /* Professional audit theme */
+    --success: 142 76% 36%; /* Green for completed items */
+    --success-foreground: 0 0% 98%;
+    
+    --warning: 38 92% 50%; /* Orange for attention */
+    --warning-foreground: 0 0% 4%;
+    
+    --info: 221 83% 53%; /* Blue for information */
+    --info-foreground: 0 0% 98%;
+
+    /* Gradients for depth and elegance */
+    --gradient-primary: linear-gradient(135deg, hsl(55 100% 52%), hsl(45 100% 45%));
+    --gradient-dark: linear-gradient(135deg, hsl(0 0% 18%), hsl(0 0% 14%));
+    --gradient-card: linear-gradient(135deg, hsl(0 0% 21%), hsl(0 0% 19%));
+
+    /* Shadows for professional depth */
+    --shadow-audit: 0 10px 40px -10px hsl(0 0% 0% / 0.4);
+    --shadow-card: 0 4px 20px -4px hsl(0 0% 0% / 0.3);
+    --shadow-yellow: 0 8px 30px -8px hsl(55 100% 52% / 0.3);
+
+    /* Animations for smooth interactions */
+    --transition-audit: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-fast: all 0.2s ease-out;
+
+    --radius: 0.75rem;
+
+    --sidebar-background: 0 0% 98%;
+
+    --sidebar-foreground: 240 5.3% 26.1%;
+
+    --sidebar-primary: 240 5.9% 10%;
+
+    --sidebar-primary-foreground: 0 0% 98%;
+
+    --sidebar-accent: 240 4.8% 95.9%;
+
+    --sidebar-accent-foreground: 240 5.9% 10%;
+
+    --sidebar-border: 220 13% 91%;
+
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  /* Light mode adjustments (optional future enhancement) */
+  .light {
+    --background: 0 0% 98%;
+    --foreground: 0 0% 8%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 8%;
+    --primary: 55 100% 45%;
+    --primary-foreground: 0 0% 98%;
+    --border: 0 0% 88%;
+    --input: 0 0% 96%;
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    background: linear-gradient(135deg, hsl(var(--background)), hsl(0 0% 16%));
+    min-height: 100vh;
+  }
+
+  /* Custom audit-specific classes */
+  .audit-header {
+    @apply bg-gradient-to-r from-card to-card/80 backdrop-blur-sm;
+    box-shadow: var(--shadow-card);
+  }
+
+  .audit-card {
+    @apply bg-card border border-border rounded-lg;
+    background: var(--gradient-card);
+    box-shadow: var(--shadow-card);
+    transition: var(--transition-audit);
+  }
+
+  .audit-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-audit);
+  }
+
+  .audit-section {
+    @apply border-l-4 border-primary;
+  }
+
+  .audit-success {
+    @apply text-green-400;
+  }
+
+  .audit-failed {
+    @apply text-destructive;
+  }
+
+  .audit-progress {
+    background: var(--gradient-primary);
+    box-shadow: var(--shadow-yellow);
+  }
+}
