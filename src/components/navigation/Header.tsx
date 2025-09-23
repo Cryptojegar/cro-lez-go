@@ -29,14 +29,14 @@ export const Header = () => {
               </Button>
             </Link>
             
-            <Link to="/domain-checkup">
+            <Link to="/amazon-importer">
               <Button 
-                variant={location.pathname === "/domain-checkup" ? "default" : "ghost"}
+                variant={location.pathname === "/amazon-importer" ? "default" : "ghost"}
                 size="sm"
                 className="flex items-center gap-2"
               >
                 <Globe className="h-4 w-4" />
-                Domain Checkup
+                Amazon to Shopify
               </Button>
             </Link>
           </nav>
