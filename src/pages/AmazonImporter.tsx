@@ -74,17 +74,29 @@ const AmazonImporter = () => {
         const worksheet = workbook.Sheets[sheetName];
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
         
+        console.log('Excel data parsed:', jsonData);
+        console.log('First row (headers):', jsonData[0]);
+        console.log('Total rows:', jsonData.length);
+        
         if (jsonData.length > 1) {
           const headers = (jsonData[0] as string[]).map(h => String(h).trim());
+          console.log('Processed headers:', headers);
+          
           amazonProducts = (jsonData.slice(1) as any[][])
-            .filter(row => row && row.length > 0)
-            .map(row => {
+            .filter(row => row && row.some(cell => cell !== null && cell !== undefined && cell !== ''))
+            .map((row, index) => {
               const product: AmazonProduct = {};
-              headers.forEach((header, index) => {
-                product[header.toLowerCase()] = row[index] ? String(row[index]).trim() : '';
+              headers.forEach((header, colIndex) => {
+                const value = row[colIndex];
+                if (value !== null && value !== undefined) {
+                  product[header.toLowerCase().replace(/\s+/g, '_')] = String(value).trim();
+                }
               });
+              console.log(`Product ${index + 1}:`, product);
               return product;
             });
+          
+          console.log('Total products parsed:', amazonProducts.length);
         }
       } else {
         // Parse text-based files (JSON, CSV, TXT)
@@ -112,10 +124,10 @@ const AmazonImporter = () => {
         }
       }
 
-      // Convert to Shopify CSV format
+      // Convert to Shopify CSV format - if data already has Shopify columns, use them directly
       const shopifyHeaders = [
         'Handle',
-        'Title',
+        'Title', 
         'Body (HTML)',
         'Vendor',
         'Product Category',
@@ -147,45 +159,95 @@ const AmazonImporter = () => {
         'Status'
       ];
 
-      const shopifyRows = amazonProducts.map(product => {
-        const handle = (product.title || product.asin || 'product')
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, '-')
-          .replace(/^-+|-+$/g, '');
+      console.log('Converting products to Shopify format...');
+      
+      const shopifyRows = amazonProducts.map((product, index) => {
+        console.log(`Converting product ${index + 1}:`, product);
+        
+        // Check if data already has Shopify-style columns
+        const hasShopifyFormat = product.handle || product.title || product['body_(html)'];
+        
+        let row: string[];
+        
+        if (hasShopifyFormat) {
+          // Data is already in Shopify format, map directly
+          row = [
+            product.handle || product.title?.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || `product-${index + 1}`,
+            product.title || 'Untitled Product',
+            product['body_(html)'] || product.body || product.description || '',
+            product.vendor || 'Unknown Brand',
+            product['product_category'] || product.category || '',
+            product.type || product.category || '',
+            product.tags || '',
+            product.published || 'true',
+            product['option1_name'] || 'Title',
+            product['option1_value'] || 'Default Title',
+            product['variant_sku'] || product.sku || '',
+            product['variant_grams'] || product.weight || '0',
+            product['variant_inventory_tracker'] || 'shopify',
+            product['variant_inventory_qty'] || '1',
+            product['variant_inventory_policy'] || 'deny',
+            product['variant_fulfillment_service'] || 'manual',
+            product['variant_price'] || product.price || '0.00',
+            product['variant_compare_at_price'] || '',
+            product['variant_requires_shipping'] || 'true',
+            product['variant_taxable'] || 'true',
+            product['variant_barcode'] || '',
+            product['image_src'] || '',
+            product['image_position'] || '1',
+            product['image_alt_text'] || product.title || '',
+            product['gift_card'] || 'false',
+            product['seo_title'] || product.title || '',
+            product['seo_description'] || product.description || '',
+            product['variant_weight_unit'] || 'kg',
+            product['variant_tax_code'] || '',
+            product['cost_per_item'] || '',
+            product.status || 'active'
+          ];
+        } else {
+          // Convert from Amazon format to Shopify format
+          const handle = (product.title || product.asin || `product-${index + 1}`)
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '');
 
-        return [
-          handle, // Handle
-          product.title || 'Untitled Product', // Title
-          product.description || '', // Body (HTML)
-          product.brand || 'Unknown Brand', // Vendor
-          product.category || '', // Product Category
-          product.category || '', // Type
-          product.category ? product.category.replace(/[>]/g, ',') : '', // Tags
-          'true', // Published
-          'Title', // Option1 Name
-          'Default Title', // Option1 Value
-          product.sku || product.asin || '', // Variant SKU
-          product.weight || '0', // Variant Grams
-          'shopify', // Variant Inventory Tracker
-          '1', // Variant Inventory Qty
-          'deny', // Variant Inventory Policy
-          'manual', // Variant Fulfillment Service
-          product.price || '0.00', // Variant Price
-          '', // Variant Compare At Price
-          'true', // Variant Requires Shipping
-          'true', // Variant Taxable
-          product.upc || product.ean || '', // Variant Barcode
-          product.images?.[0] || '', // Image Src
-          '1', // Image Position
-          product.title || '', // Image Alt Text
-          'false', // Gift Card
-          product.title || '', // SEO Title
-          product.description || '', // SEO Description
-          'kg', // Variant Weight Unit
-          '', // Variant Tax Code
-          '', // Cost per item
-          'active' // Status
-        ];
+          row = [
+            handle,
+            product.title || 'Untitled Product',
+            product.description || '',
+            product.brand || 'Unknown Brand',
+            product.category || '',
+            product.category || '',
+            product.category ? product.category.replace(/[>]/g, ',') : '',
+            'true',
+            'Title',
+            'Default Title',
+            product.sku || product.asin || '',
+            product.weight || '0',
+            'shopify',
+            '1',
+            'deny',
+            'manual',
+            product.price || '0.00',
+            '',
+            'true',
+            'true',
+            product.upc || product.ean || '',
+            product.images?.[0] || '',
+            '1',
+            product.title || '',
+            'false',
+            product.title || '',
+            product.description || '',
+            'kg',
+            '',
+            '',
+            'active'
+          ];
+        }
+        
+        console.log(`Converted row ${index + 1}:`, row);
+        return row;
       });
 
       // Create CSV content
