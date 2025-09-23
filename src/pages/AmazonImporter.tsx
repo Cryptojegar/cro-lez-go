@@ -14,6 +14,7 @@ import {
   ArrowRight
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import * as XLSX from 'xlsx';
 
 interface AmazonProduct {
   title?: string;
@@ -59,30 +60,56 @@ const AmazonImporter = () => {
     setIsProcessing(true);
 
     try {
-      const text = await file.text();
-      
-      // Parse the Amazon CLR data (assuming it's JSON or CSV format)
       let amazonProducts: AmazonProduct[] = [];
       
-      try {
-        // Try parsing as JSON first
-        const jsonData = JSON.parse(text);
-        amazonProducts = Array.isArray(jsonData) ? jsonData : [jsonData];
-      } catch {
-        // If JSON parsing fails, try CSV parsing
-        const lines = text.split('\n');
-        const headers = lines[0].split(',').map(h => h.trim());
+      // Check if file is Excel format
+      if (file.name.toLowerCase().endsWith('.xlsx') || 
+          file.name.toLowerCase().endsWith('.xlsm') || 
+          file.name.toLowerCase().endsWith('.xls')) {
         
-        amazonProducts = lines.slice(1)
-          .filter(line => line.trim())
-          .map(line => {
-            const values = line.split(',');
-            const product: AmazonProduct = {};
-            headers.forEach((header, index) => {
-              product[header.toLowerCase()] = values[index]?.trim() || '';
+        // Parse Excel file
+        const arrayBuffer = await file.arrayBuffer();
+        const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        
+        if (jsonData.length > 1) {
+          const headers = (jsonData[0] as string[]).map(h => String(h).trim());
+          amazonProducts = (jsonData.slice(1) as any[][])
+            .filter(row => row && row.length > 0)
+            .map(row => {
+              const product: AmazonProduct = {};
+              headers.forEach((header, index) => {
+                product[header.toLowerCase()] = row[index] ? String(row[index]).trim() : '';
+              });
+              return product;
             });
-            return product;
-          });
+        }
+      } else {
+        // Parse text-based files (JSON, CSV, TXT)
+        const text = await file.text();
+        
+        try {
+          // Try parsing as JSON first
+          const jsonData = JSON.parse(text);
+          amazonProducts = Array.isArray(jsonData) ? jsonData : [jsonData];
+        } catch {
+          // If JSON parsing fails, try CSV parsing
+          const lines = text.split('\n');
+          const headers = lines[0].split(',').map(h => h.trim());
+          
+          amazonProducts = lines.slice(1)
+            .filter(line => line.trim())
+            .map(line => {
+              const values = line.split(',');
+              const product: AmazonProduct = {};
+              headers.forEach((header, index) => {
+                product[header.toLowerCase()] = values[index]?.trim() || '';
+              });
+              return product;
+            });
+        }
       }
 
       // Convert to Shopify CSV format
@@ -244,13 +271,13 @@ const AmazonImporter = () => {
               <Input
                 id="file-upload"
                 type="file"
-                accept=".json,.csv,.txt"
+                accept=".json,.csv,.txt,.xlsx,.xlsm,.xls"
                 onChange={handleFileUpload}
                 ref={fileInputRef}
                 className="mt-2"
               />
               <p className="text-sm text-muted-foreground mt-2">
-                Supported formats: JSON, CSV, TXT
+                Supported formats: JSON, CSV, TXT, Excel (.xlsx, .xlsm, .xls)
               </p>
             </div>
 
