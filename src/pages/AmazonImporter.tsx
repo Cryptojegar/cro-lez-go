@@ -55,24 +55,40 @@ const AmazonImporter = () => {
       const arrayBuffer = await file.arrayBuffer();
       const workbook = XLSX.read(arrayBuffer, { type: 'array' });
       
+      console.log('Workbook sheet names:', workbook.SheetNames);
+      
       const sheetData: SheetData[] = workbook.SheetNames.map(sheetName => {
+        console.log(`Processing sheet: ${sheetName}`);
         const worksheet = workbook.Sheets[sheetName];
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
         
+        console.log(`Sheet ${sheetName} raw data:`, jsonData.slice(0, 3)); // First 3 rows
+        
         if (jsonData.length > 1) {
           const headers = (jsonData[0] as string[]).map(h => String(h).trim());
+          console.log(`Sheet ${sheetName} headers:`, headers);
+          
           const data = (jsonData.slice(1) as any[][])
             .filter(row => row && row.some(cell => cell !== null && cell !== undefined && cell !== ''))
-            .map(row => {
+            .map((row, rowIndex) => {
               const product: any = {};
               headers.forEach((header, colIndex) => {
                 const value = row[colIndex];
-                if (value !== null && value !== undefined) {
+                if (value !== null && value !== undefined && value !== '') {
+                  // Keep original header name AND create cleaned version
+                  product[header] = String(value).trim();
                   product[header.toLowerCase().replace(/\s+/g, '_')] = String(value).trim();
                 }
               });
+              
+              if (rowIndex < 2) { // Log first 2 products for debugging
+                console.log(`Sheet ${sheetName} product ${rowIndex + 1}:`, product);
+              }
+              
               return product;
             });
+          
+          console.log(`Sheet ${sheetName} processed ${data.length} products`);
           
           return {
             name: sheetName,
@@ -177,28 +193,80 @@ const AmazonImporter = () => {
         'Status'
       ];
 
+      console.log('All products to process:', allProducts.length);
+      console.log('Sample product data:', allProducts[0]);
+      console.log('Available fields in first product:', Object.keys(allProducts[0] || {}));
+
       const shopifyRows = allProducts.map((product, index) => {
+        console.log(`Processing product ${index + 1}:`, product);
+        
         // Auto-detect format and map fields intelligently
         const getFieldValue = (fieldNames: string[]) => {
           for (const name of fieldNames) {
-            if (product[name] !== undefined && product[name] !== null && product[name] !== '') {
-              return String(product[name]).trim();
+            const value = product[name];
+            if (value !== undefined && value !== null && value !== '') {
+              console.log(`Found value for ${name}:`, value);
+              return String(value).trim();
             }
           }
+          console.log(`No value found for any of:`, fieldNames);
           return '';
         };
 
-        // Generate handle
-        const title = getFieldValue(['title', 'Title', 'product_name', 'Product Name', 'name', 'Name']);
+        // Generate handle - try more field variations
+        const title = getFieldValue([
+          'title', 'Title', 'TITLE',
+          'product_name', 'Product Name', 'Product_Name', 'PRODUCT_NAME',
+          'name', 'Name', 'NAME',
+          'item_name', 'Item Name', 'Item_Name',
+          'listing_title', 'Listing Title', 'Listing_Title'
+        ]);
+        console.log(`Product ${index + 1} title:`, title);
+        
         const handle = title ? title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') : `product-${index + 1}`;
 
-        // Map fields with fallbacks
-        const price = getFieldValue(['variant_price', 'price', 'Price', 'unit_price', 'Unit Price']) || '0.00';
-        const description = getFieldValue(['body_(html)', 'description', 'Description', 'product_description', 'Product Description']);
-        const brand = getFieldValue(['vendor', 'brand', 'Brand', 'manufacturer', 'Manufacturer']) || 'Unknown Brand';
-        const category = getFieldValue(['product_category', 'category', 'Category', 'type', 'Type']);
-        const sku = getFieldValue(['variant_sku', 'sku', 'SKU', 'product_id', 'Product ID', 'asin', 'ASIN']);
-        const imageUrl = getFieldValue(['image_src', 'image_url', 'Image URL', 'main_image', 'Main Image']);
+        // Map fields with more variations
+        const price = getFieldValue([
+          'variant_price', 'price', 'Price', 'PRICE',
+          'unit_price', 'Unit Price', 'Unit_Price',
+          'cost', 'Cost', 'COST',
+          'amount', 'Amount', 'AMOUNT',
+          'listing_price', 'Listing Price', 'Listing_Price'
+        ]) || '0.00';
+        
+        const description = getFieldValue([
+          'body_(html)', 'description', 'Description', 'DESCRIPTION',
+          'product_description', 'Product Description', 'Product_Description',
+          'details', 'Details', 'DETAILS',
+          'summary', 'Summary', 'SUMMARY'
+        ]);
+        
+        const brand = getFieldValue([
+          'vendor', 'brand', 'Brand', 'BRAND',
+          'manufacturer', 'Manufacturer', 'MANUFACTURER',
+          'company', 'Company', 'COMPANY'
+        ]) || 'Unknown Brand';
+        
+        const category = getFieldValue([
+          'product_category', 'category', 'Category', 'CATEGORY',
+          'type', 'Type', 'TYPE',
+          'classification', 'Classification', 'CLASSIFICATION'
+        ]);
+        
+        const sku = getFieldValue([
+          'variant_sku', 'sku', 'SKU',
+          'product_id', 'Product ID', 'Product_ID',
+          'asin', 'ASIN',
+          'item_id', 'Item ID', 'Item_ID',
+          'identifier', 'Identifier', 'IDENTIFIER'
+        ]);
+        
+        const imageUrl = getFieldValue([
+          'image_src', 'image_url', 'Image URL', 'Image_URL',
+          'main_image', 'Main Image', 'Main_Image',
+          'photo', 'Photo', 'PHOTO',
+          'picture', 'Picture', 'PICTURE'
+        ]);
 
         // Validate price format
         const validPrice = price && !isNaN(parseFloat(price)) ? parseFloat(price).toFixed(2) : '0.00';
