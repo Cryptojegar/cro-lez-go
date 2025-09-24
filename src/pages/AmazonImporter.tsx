@@ -1,57 +1,122 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { 
-  Upload, 
-  Download, 
-  FileText, 
-  CheckCircle, 
-  AlertTriangle,
   Package,
-  ArrowRight
+  ArrowRight,
+  Download
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import * as XLSX from 'xlsx';
+import FileUpload from "@/components/importer/FileUpload";
+import SheetProcessor from "@/components/importer/SheetProcessor";
+import DataValidator from "@/components/importer/DataValidator";
+import CSVPreview from "@/components/importer/CSVPreview";
+import { validateProductData } from "@/utils/dataValidation";
 
-interface AmazonProduct {
-  title?: string;
-  asin?: string;
-  price?: string;
-  description?: string;
-  category?: string;
-  brand?: string;
-  sku?: string;
-  weight?: string;
-  dimensions?: string;
-  images?: string[];
-  [key: string]: any;
+interface SheetData {
+  name: string;
+  data: any[];
+  headers: string[];
+  rowCount: number;
+}
+
+interface ValidationResult {
+  type: 'error' | 'warning' | 'info';
+  field: string;
+  message: string;
+  count?: number;
 }
 
 const AmazonImporter = () => {
-  const [file, setFile] = useState<File | null>(null);
+  const [clrFile, setCLRFile] = useState<File | null>(null);
+  const [templateFile, setTemplateFile] = useState<File | null>(null);
+  const [sheets, setSheets] = useState<SheetData[]>([]);
+  const [selectedSheets, setSelectedSheets] = useState<string[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processedData, setProcessedData] = useState<string | null>(null);
   const [productCount, setProductCount] = useState(0);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [validationResults, setValidationResults] = useState<ValidationResult[]>([]);
+  const [validProducts, setValidProducts] = useState(0);
   const { toast } = useToast();
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const uploadedFile = event.target.files?.[0];
-    if (uploadedFile) {
-      setFile(uploadedFile);
-      setProcessedData(null);
-      setProductCount(0);
+  const handleCLRFileUpload = async (file: File) => {
+    setCLRFile(file);
+    setProcessedData(null);
+    setProductCount(0);
+    setSheets([]);
+    setSelectedSheets([]);
+    setValidationResults([]);
+    
+    if (!file) return;
+
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+      
+      const sheetData: SheetData[] = workbook.SheetNames.map(sheetName => {
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        
+        if (jsonData.length > 1) {
+          const headers = (jsonData[0] as string[]).map(h => String(h).trim());
+          const data = (jsonData.slice(1) as any[][])
+            .filter(row => row && row.some(cell => cell !== null && cell !== undefined && cell !== ''))
+            .map(row => {
+              const product: any = {};
+              headers.forEach((header, colIndex) => {
+                const value = row[colIndex];
+                if (value !== null && value !== undefined) {
+                  product[header.toLowerCase().replace(/\s+/g, '_')] = String(value).trim();
+                }
+              });
+              return product;
+            });
+          
+          return {
+            name: sheetName,
+            data,
+            headers,
+            rowCount: data.length
+          };
+        }
+        
+        return {
+          name: sheetName,
+          data: [],
+          headers: [],
+          rowCount: 0
+        };
+      });
+      
+      setSheets(sheetData.filter(sheet => sheet.rowCount > 0));
+      setSelectedSheets(sheetData.filter(sheet => sheet.rowCount > 0).map(sheet => sheet.name));
+      
+      toast({
+        title: "File Processed",
+        description: `Found ${sheetData.filter(sheet => sheet.rowCount > 0).length} sheets with data`,
+      });
+      
+    } catch (error) {
+      console.error('Error processing CLR file:', error);
+      toast({
+        title: "Processing Failed",
+        description: "Unable to process the CLR file. Please check the file format.",
+        variant: "destructive",
+      });
     }
   };
 
-  const processAmazonData = async () => {
-    if (!file) {
+  const handleTemplateUpload = (file: File) => {
+    setTemplateFile(file);
+  };
+
+  const processSelectedSheets = async () => {
+    if (selectedSheets.length === 0) {
       toast({
         title: "Error",
-        description: "Please select a file to process",
+        description: "Please select at least one sheet to process",
         variant: "destructive",
       });
       return;
@@ -60,71 +125,24 @@ const AmazonImporter = () => {
     setIsProcessing(true);
 
     try {
-      let amazonProducts: AmazonProduct[] = [];
+      // Combine data from selected sheets
+      let allProducts: any[] = [];
       
-      // Check if file is Excel format
-      if (file.name.toLowerCase().endsWith('.xlsx') || 
-          file.name.toLowerCase().endsWith('.xlsm') || 
-          file.name.toLowerCase().endsWith('.xls')) {
-        
-        // Parse Excel file
-        const arrayBuffer = await file.arrayBuffer();
-        const workbook = XLSX.read(arrayBuffer, { type: 'array' });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-        
-        console.log('Excel data parsed:', jsonData);
-        console.log('First row (headers):', jsonData[0]);
-        console.log('Total rows:', jsonData.length);
-        
-        if (jsonData.length > 1) {
-          const headers = (jsonData[0] as string[]).map(h => String(h).trim());
-          console.log('Processed headers:', headers);
-          
-          amazonProducts = (jsonData.slice(1) as any[][])
-            .filter(row => row && row.some(cell => cell !== null && cell !== undefined && cell !== ''))
-            .map((row, index) => {
-              const product: AmazonProduct = {};
-              headers.forEach((header, colIndex) => {
-                const value = row[colIndex];
-                if (value !== null && value !== undefined) {
-                  product[header.toLowerCase().replace(/\s+/g, '_')] = String(value).trim();
-                }
-              });
-              console.log(`Product ${index + 1}:`, product);
-              return product;
-            });
-          
-          console.log('Total products parsed:', amazonProducts.length);
+      selectedSheets.forEach(sheetName => {
+        const sheet = sheets.find(s => s.name === sheetName);
+        if (sheet) {
+          allProducts = [...allProducts, ...sheet.data];
         }
-      } else {
-        // Parse text-based files (JSON, CSV, TXT)
-        const text = await file.text();
-        
-        try {
-          // Try parsing as JSON first
-          const jsonData = JSON.parse(text);
-          amazonProducts = Array.isArray(jsonData) ? jsonData : [jsonData];
-        } catch {
-          // If JSON parsing fails, try CSV parsing
-          const lines = text.split('\n');
-          const headers = lines[0].split(',').map(h => h.trim());
-          
-          amazonProducts = lines.slice(1)
-            .filter(line => line.trim())
-            .map(line => {
-              const values = line.split(',');
-              const product: AmazonProduct = {};
-              headers.forEach((header, index) => {
-                product[header.toLowerCase()] = values[index]?.trim() || '';
-              });
-              return product;
-            });
-        }
-      }
+      });
 
-      // Convert to Shopify CSV format - if data already has Shopify columns, use them directly
+      console.log('Combined products from sheets:', allProducts.length);
+
+      // Validate data
+      const { results, validProducts: validCount } = validateProductData(allProducts);
+      setValidationResults(results);
+      setValidProducts(validCount);
+
+      // Standard Shopify CSV headers
       const shopifyHeaders = [
         'Handle',
         'Title', 
@@ -159,122 +177,95 @@ const AmazonImporter = () => {
         'Status'
       ];
 
-      console.log('Converting products to Shopify format...');
-      
-      const shopifyRows = amazonProducts.map((product, index) => {
-        console.log(`Converting product ${index + 1}:`, product);
-        
-        // Check if data already has Shopify-style columns
-        const hasShopifyFormat = product.handle || product.title || product['body_(html)'];
-        
-        let row: string[];
-        
-        if (hasShopifyFormat) {
-          // Data is already in Shopify format, map directly
-          row = [
-            product.handle || product.title?.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || `product-${index + 1}`,
-            product.title || 'Untitled Product',
-            product['body_(html)'] || product.body || product.description || '',
-            product.vendor || 'Unknown Brand',
-            product['product_category'] || product.category || '',
-            product.type || product.category || '',
-            product.tags || '',
-            product.published || 'true',
-            product['option1_name'] || 'Title',
-            product['option1_value'] || 'Default Title',
-            product['variant_sku'] || product.sku || '',
-            product['variant_grams'] || product.weight || '0',
-            product['variant_inventory_tracker'] || 'shopify',
-            product['variant_inventory_qty'] || '1',
-            product['variant_inventory_policy'] || 'deny',
-            product['variant_fulfillment_service'] || 'manual',
-            product['variant_price'] || product.price || '0.00',
-            product['variant_compare_at_price'] || '',
-            product['variant_requires_shipping'] || 'true',
-            product['variant_taxable'] || 'true',
-            product['variant_barcode'] || '',
-            product['image_src'] || '',
-            product['image_position'] || '1',
-            product['image_alt_text'] || product.title || '',
-            product['gift_card'] || 'false',
-            product['seo_title'] || product.title || '',
-            product['seo_description'] || product.description || '',
-            product['variant_weight_unit'] || 'kg',
-            product['variant_tax_code'] || '',
-            product['cost_per_item'] || '',
-            product.status || 'active'
-          ];
-        } else {
-          // Convert from Amazon format to Shopify format
-          const handle = (product.title || product.asin || `product-${index + 1}`)
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, '-')
-            .replace(/^-+|-+$/g, '');
+      const shopifyRows = allProducts.map((product, index) => {
+        // Auto-detect format and map fields intelligently
+        const getFieldValue = (fieldNames: string[]) => {
+          for (const name of fieldNames) {
+            if (product[name] !== undefined && product[name] !== null && product[name] !== '') {
+              return String(product[name]).trim();
+            }
+          }
+          return '';
+        };
 
-          row = [
-            handle,
-            product.title || 'Untitled Product',
-            product.description || '',
-            product.brand || 'Unknown Brand',
-            product.category || '',
-            product.category || '',
-            product.category ? product.category.replace(/[>]/g, ',') : '',
-            'true',
-            'Title',
-            'Default Title',
-            product.sku || product.asin || '',
-            product.weight || '0',
-            'shopify',
-            '1',
-            'deny',
-            'manual',
-            product.price || '0.00',
-            '',
-            'true',
-            'true',
-            product.upc || product.ean || '',
-            product.images?.[0] || '',
-            '1',
-            product.title || '',
-            'false',
-            product.title || '',
-            product.description || '',
-            'kg',
-            '',
-            '',
-            'active'
-          ];
-        }
-        
-        console.log(`Converted row ${index + 1}:`, row);
-        return row;
+        // Generate handle
+        const title = getFieldValue(['title', 'Title', 'product_name', 'Product Name', 'name', 'Name']);
+        const handle = title ? title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') : `product-${index + 1}`;
+
+        // Map fields with fallbacks
+        const price = getFieldValue(['variant_price', 'price', 'Price', 'unit_price', 'Unit Price']) || '0.00';
+        const description = getFieldValue(['body_(html)', 'description', 'Description', 'product_description', 'Product Description']);
+        const brand = getFieldValue(['vendor', 'brand', 'Brand', 'manufacturer', 'Manufacturer']) || 'Unknown Brand';
+        const category = getFieldValue(['product_category', 'category', 'Category', 'type', 'Type']);
+        const sku = getFieldValue(['variant_sku', 'sku', 'SKU', 'product_id', 'Product ID', 'asin', 'ASIN']);
+        const imageUrl = getFieldValue(['image_src', 'image_url', 'Image URL', 'main_image', 'Main Image']);
+
+        // Validate price format
+        const validPrice = price && !isNaN(parseFloat(price)) ? parseFloat(price).toFixed(2) : '0.00';
+
+        return [
+          handle,
+          title || 'Untitled Product',
+          description,
+          brand,
+          category,
+          category,
+          category ? category.replace(/[>]/g, ',') : '',
+          'true',
+          'Title',
+          'Default Title',
+          sku,
+          '0', // weight in grams
+          'shopify',
+          '1', // inventory qty
+          'deny',
+          'manual',
+          validPrice,
+          '', // compare at price
+          'true',
+          'true',
+          '', // barcode
+          imageUrl,
+          '1', // image position
+          title || '',
+          'false', // gift card
+          title || '', // SEO title
+          description.substring(0, 160) || '', // SEO description
+          'kg',
+          '', // tax code
+          '', // cost per item
+          'active'
+        ];
       });
 
-      // Create CSV content
+      // Create CSV content with proper escaping
       const csvContent = [
         shopifyHeaders.join(','),
         ...shopifyRows.map(row => 
-          row.map(field => 
-            typeof field === 'string' && (field.includes(',') || field.includes('"')) 
-              ? `"${field.replace(/"/g, '""')}"` 
-              : field
-          ).join(',')
+          row.map(field => {
+            const stringField = String(field || '');
+            // Escape fields that contain commas, quotes, or newlines
+            if (stringField.includes(',') || stringField.includes('"') || stringField.includes('\n')) {
+              return `"${stringField.replace(/"/g, '""')}"`;
+            }
+            return stringField;
+          }).join(',')
         )
       ].join('\n');
 
       setProcessedData(csvContent);
-      setProductCount(amazonProducts.length);
+      setProductCount(allProducts.length);
 
       toast({
         title: "Processing Complete",
-        description: `Successfully converted ${amazonProducts.length} products to Shopify CSV format`,
+        description: `Successfully converted ${allProducts.length} products to Shopify CSV format`,
       });
 
     } catch (error) {
       console.error('Processing error:', error);
       toast({
         title: "Processing Failed",
-        description: "Unable to process the Amazon data. Please check the file format.",
+        description: "Unable to process the data. Please check the file format.",
         variant: "destructive",
       });
     } finally {
@@ -285,7 +276,11 @@ const AmazonImporter = () => {
   const downloadCSV = () => {
     if (!processedData) return;
 
-    const blob = new Blob([processedData], { type: 'text/csv;charset=utf-8;' });
+    // Create CSV with UTF-8 BOM for better Excel compatibility
+    const BOM = '\uFEFF';
+    const csvWithBOM = BOM + processedData;
+    
+    const blob = new Blob([csvWithBOM], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
@@ -299,6 +294,10 @@ const AmazonImporter = () => {
       title: "Download Started",
       description: "Your Shopify CSV file is being downloaded",
     });
+  };
+
+  const handlePreviewSheet = (sheetName: string) => {
+    console.log('Previewing sheet:', sheetName);
   };
 
   return (
@@ -319,124 +318,90 @@ const AmazonImporter = () => {
           </div>
         </div>
 
-        {/* Upload Section */}
-        <Card className="audit-card mb-8">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Upload className="h-5 w-5" />
-              Upload Amazon Data
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <Label htmlFor="file-upload">Select Amazon CLR Data File</Label>
-              <Input
-                id="file-upload"
-                type="file"
-                accept=".json,.csv,.txt,.xlsx,.xlsm,.xls"
-                onChange={handleFileUpload}
-                ref={fileInputRef}
-                className="mt-2"
-              />
-              <p className="text-sm text-muted-foreground mt-2">
-                Supported formats: JSON, CSV, TXT, Excel (.xlsx, .xlsm, .xls)
-              </p>
-            </div>
+        {/* File Upload Section */}
+        <div className="mb-8">
+          <FileUpload
+            onCLRFileUpload={handleCLRFileUpload}
+            onTemplateUpload={handleTemplateUpload}
+            clrFile={clrFile}
+            templateFile={templateFile}
+          />
+        </div>
 
-            {file && (
-              <div className="p-4 bg-muted/30 rounded-lg">
-                <div className="flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm font-medium">{file.name}</span>
-                  <span className="text-sm text-muted-foreground">
-                    ({(file.size / 1024).toFixed(1)} KB)
-                  </span>
-                </div>
-              </div>
-            )}
+        {/* Sheet Processing Section */}
+        {sheets.length > 0 && (
+          <div className="mb-8">
+            <SheetProcessor
+              sheets={sheets}
+              selectedSheets={selectedSheets}
+              onSheetSelection={setSelectedSheets}
+              onPreviewSheet={handlePreviewSheet}
+            />
+          </div>
+        )}
 
-            <Button 
-              onClick={processAmazonData} 
-              disabled={!file || isProcessing}
-              size="lg"
-              className="w-full"
-            >
-              {isProcessing ? (
-                <>
-                  <Upload className="h-4 w-4 mr-2 animate-spin" />
-                  Processing...
-                </>
-              ) : (
-                <>
-                  <ArrowRight className="h-4 w-4 mr-2" />
-                  Convert to Shopify Format
-                </>
-              )}
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Results Section */}
-        {processedData && (
+        {/* Process Button */}
+        {selectedSheets.length > 0 && (
           <Card className="audit-card mb-8">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <CheckCircle className="h-5 w-5 text-success" />
-                Conversion Complete
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="text-center p-4 bg-success/10 rounded-lg">
-                  <div className="text-2xl font-bold text-success mb-1">
-                    {productCount}
-                  </div>
-                  <div className="text-sm text-muted-foreground">Products Converted</div>
-                </div>
-                
-                <div className="text-center p-4 bg-primary/10 rounded-lg">
-                  <div className="text-2xl font-bold text-primary mb-1">
-                    CSV
-                  </div>
-                  <div className="text-sm text-muted-foreground">Format Ready</div>
-                </div>
-                
-                <div className="text-center p-4 bg-accent/10 rounded-lg">
-                  <div className="text-2xl font-bold text-accent-foreground mb-1">
-                    100%
-                  </div>
-                  <div className="text-sm text-muted-foreground">Shopify Compatible</div>
-                </div>
-              </div>
-
-              <Separator />
-
+            <CardContent className="pt-6">
               <Button 
-                onClick={downloadCSV}
+                onClick={processSelectedSheets} 
+                disabled={isProcessing}
                 size="lg"
                 className="w-full"
               >
-                <Download className="h-4 w-4 mr-2" />
-                Download Shopify CSV
+                {isProcessing ? (
+                  <>
+                    <ArrowRight className="h-4 w-4 mr-2 animate-spin" />
+                    Processing {selectedSheets.length} sheet(s)...
+                  </>
+                ) : (
+                  <>
+                    <ArrowRight className="h-4 w-4 mr-2" />
+                    Convert {selectedSheets.length} Sheet(s) to Shopify Format
+                  </>
+                )}
               </Button>
             </CardContent>
           </Card>
         )}
 
+        {/* Validation Results */}
+        {validationResults.length > 0 && (
+          <div className="mb-8">
+            <DataValidator
+              validationResults={validationResults}
+              totalProducts={productCount}
+              validProducts={validProducts}
+            />
+          </div>
+        )}
+
+        {/* CSV Preview Section */}
+        {processedData && (
+          <div className="mb-8">
+            <CSVPreview
+              csvData={processedData}
+              productCount={productCount}
+              onDownload={downloadCSV}
+            />
+          </div>
+        )}
+
         {/* Instructions */}
         <Card className="audit-card">
           <CardHeader>
-            <CardTitle>How to Use This Tool</CardTitle>
+            <CardTitle>How to Use This Enhanced Tool</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
               <div className="text-center">
                 <div className="p-3 rounded-lg bg-primary/10 w-fit mx-auto mb-3">
-                  <Upload className="h-6 w-6 text-primary" />
+                  <Package className="h-6 w-6 text-primary" />
                 </div>
-                <h3 className="font-semibold mb-2">1. Upload Your Data</h3>
+                <h3 className="font-semibold mb-2">1. Upload CLR File</h3>
                 <p className="text-sm text-muted-foreground">
-                  Upload your Amazon CLR data file in JSON, CSV, or TXT format
+                  Upload your Amazon CLR data file with multiple sheets support
                 </p>
               </div>
               
@@ -444,9 +409,19 @@ const AmazonImporter = () => {
                 <div className="p-3 rounded-lg bg-primary/10 w-fit mx-auto mb-3">
                   <ArrowRight className="h-6 w-6 text-primary" />
                 </div>
-                <h3 className="font-semibold mb-2">2. Convert Data</h3>
+                <h3 className="font-semibold mb-2">2. Select Sheets</h3>
                 <p className="text-sm text-muted-foreground">
-                  Our tool automatically converts your Amazon data to Shopify CSV format
+                  Choose which sheets to process and preview their contents
+                </p>
+              </div>
+              
+              <div className="text-center">
+                <div className="p-3 rounded-lg bg-primary/10 w-fit mx-auto mb-3">
+                  <ArrowRight className="h-6 w-6 text-primary" />
+                </div>
+                <h3 className="font-semibold mb-2">3. Validate & Convert</h3>
+                <p className="text-sm text-muted-foreground">
+                  Auto-validate data and convert to Shopify CSV format
                 </p>
               </div>
               
@@ -454,26 +429,11 @@ const AmazonImporter = () => {
                 <div className="p-3 rounded-lg bg-primary/10 w-fit mx-auto mb-3">
                   <Download className="h-6 w-6 text-primary" />
                 </div>
-                <h3 className="font-semibold mb-2">3. Import to Shopify</h3>
+                <h3 className="font-semibold mb-2">4. Preview & Download</h3>
                 <p className="text-sm text-muted-foreground">
-                  Download the CSV and import it directly into your Shopify store
+                  Preview results and download the Shopify-ready CSV
                 </p>
               </div>
-            </div>
-
-            <Separator />
-
-            <div className="space-y-2">
-              <h4 className="font-medium flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 text-warning" />
-                Important Notes
-              </h4>
-              <ul className="text-sm text-muted-foreground space-y-1 ml-6">
-                <li>• Ensure your Amazon data includes product titles, prices, and descriptions</li>
-                <li>• Product images should be accessible via URL for proper import</li>
-                <li>• Review the generated CSV before importing to Shopify</li>
-                <li>• The tool maps common Amazon fields to Shopify's required columns</li>
-              </ul>
             </div>
           </CardContent>
         </Card>
