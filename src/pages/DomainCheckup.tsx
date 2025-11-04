@@ -156,7 +156,15 @@ const DomainCheckup = () => {
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8 max-w-6xl">
-        {/* Back Navigation - Remove since we have header nav now */}
+        {/* Back Navigation */}
+        <div className="mb-4">
+          <Link to="/">
+            <Button variant="ghost" size="sm">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to CRO Audit
+            </Button>
+          </Link>
+        </div>
 
         {/* Header */}
         <div className="audit-header rounded-lg p-8 mb-8">

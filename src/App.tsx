@@ -3,9 +3,8 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { Header } from "@/components/navigation/Header";
 import Index from "./pages/Index";
-import AmazonImporter from "./pages/AmazonImporter";
+import DomainCheckup from "./pages/DomainCheckup";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -16,10 +15,9 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <Header />
         <Routes>
           <Route path="/" element={<Index />} />
-          <Route path="/amazon-importer" element={<AmazonImporter />} />
+          <Route path="/domain-checkup" element={<DomainCheckup />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
