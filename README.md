@@ -92,6 +92,12 @@ personal access token with **Contents: Read and write** for this repository
 in the browser's `localStorage` only and is never committed. After publishing, the
 site redeploys (Lovable Publish or your host) and the link is live for clients.
 
+The repository may be **private**: the token simply needs access to it
+(*Repository access → Only select repositories → this repo*), and the host that
+builds the site needs read access to the same repo. Note that repository privacy
+does **not** make the reviews private — a published review is a public page on the
+deployed site (`/<slug>`), and `claude-reviews.json` lists every published slug.
+
 ### Local development
 
 ```sh
