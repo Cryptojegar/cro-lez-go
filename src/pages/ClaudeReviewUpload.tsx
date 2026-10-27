@@ -15,7 +15,6 @@ import {
   ExternalLink,
   Eye,
   FileCode2,
-  Github,
   KeyRound,
   Link2,
   Loader2,
@@ -30,6 +29,7 @@ import {
   deleteReview,
   getRepoConfig,
   getToken,
+  isRepoConfigured,
   loadRepoManifest,
   publishReview,
   reviewShareUrl,
@@ -76,7 +76,8 @@ const ClaudeReviewUpload = () => {
   const [token, setToken] = useState(() => getToken());
   const [tokenSourceState, setTokenSourceState] = useState<TokenSource>(() => tokenSource());
   const [repoConfig, setRepoConfig] = useState<RepoConfig>(() => getRepoConfig());
-  const [showSettings, setShowSettings] = useState(() => !getToken());
+  const [showSettings, setShowSettings] = useState(false);
+  const [showTargetEditor, setShowTargetEditor] = useState(false);
 
   const [reviews, setReviews] = useState<ClaudeReview[]>([]);
   const [loadingReviews, setLoadingReviews] = useState(true);
@@ -206,6 +207,14 @@ const ClaudeReviewUpload = () => {
     });
   };
 
+  const updateRepoConfig = (patch: Partial<RepoConfig>) => {
+    setRepoConfig((current) => {
+      const next = { ...current, ...patch };
+      saveRepoConfig(next);
+      return next;
+    });
+  };
+
   const handlePublish = async () => {
     if (!html) {
       toast({
@@ -221,8 +230,19 @@ const ClaudeReviewUpload = () => {
       return;
     }
 
-    if (!token.trim()) {
+    if (!isRepoConfigured(repoConfig)) {
       setShowSettings(true);
+      setShowTargetEditor(true);
+      toast({
+        title: "Set the publish target",
+        description: "Add the repository owner and name once — they stay in this browser and are never shown here again.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!token.trim()) {
+      connectToken();
       toast({
         title: "Connect GitHub first",
         description: "Publishing writes the file into the site repository, so a token is needed once per browser.",
@@ -269,8 +289,19 @@ const ClaudeReviewUpload = () => {
     );
     if (!confirmed) return;
 
-    if (!token.trim()) {
+    if (!isRepoConfigured(repoConfig)) {
       setShowSettings(true);
+      setShowTargetEditor(true);
+      toast({
+        title: "Set the publish target",
+        description: "Add the repository owner and name once — they stay in this browser.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!token.trim()) {
+      connectToken();
       toast({
         title: "Connect GitHub first",
         description: "Deleting also updates the repository.",
@@ -479,51 +510,12 @@ const ClaudeReviewUpload = () => {
                   </Button>
                   <Button variant="outline" onClick={() => setShowSettings((value) => !value)}>
                     <Settings2 className="h-4 w-4" />
-                    GitHub settings
+                    {showSettings ? "Hide settings" : "Settings"}
                   </Button>
                 </div>
 
                 {showSettings && (
                   <div className="space-y-4 rounded-lg border border-border bg-secondary/30 p-4">
-                    <div className="flex items-center gap-2 text-sm font-medium">
-                      <Github className="h-4 w-4 text-primary" />
-                      Publish target (saved in this browser only)
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <div className="space-y-2">
-                        <Label htmlFor="repoOwner">Owner</Label>
-                        <Input
-                          id="repoOwner"
-                          value={repoConfig.owner}
-                          onChange={(event) =>
-                            setRepoConfig({ ...repoConfig, owner: event.target.value })
-                          }
-                          className="bg-input border-border"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="repoName">Repository</Label>
-                        <Input
-                          id="repoName"
-                          value={repoConfig.repo}
-                          onChange={(event) =>
-                            setRepoConfig({ ...repoConfig, repo: event.target.value })
-                          }
-                          className="bg-input border-border"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="repoBranch">Branch</Label>
-                        <Input
-                          id="repoBranch"
-                          value={repoConfig.branch}
-                          onChange={(event) =>
-                            setRepoConfig({ ...repoConfig, branch: event.target.value })
-                          }
-                          className="bg-input border-border"
-                        />
-                      </div>
-                    </div>
                     <div className="space-y-2">
                       <Label className="flex items-center gap-2">
                         <KeyRound className="h-4 w-4 text-primary" />
@@ -560,9 +552,8 @@ const ClaudeReviewUpload = () => {
                       </div>
                       <p className="text-xs text-muted-foreground">
                         Connect asks for a token once and keeps it in this browser's storage only —
-                        it is never shown on the page and never committed. Create a fine-grained
-                        token with <em>Contents: Read and write</em> for {repoConfig.owner}/
-                        {repoConfig.repo} at github.com/settings/personal-access-tokens/new.
+                        it is never shown on the page and never committed. Use a fine-grained token
+                        with <em>Contents: Read and write</em> for the publishing repository.
                       </p>
                       {tokenSourceState === "env" && (
                         <p className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
@@ -573,6 +564,61 @@ const ClaudeReviewUpload = () => {
                             instead and remove that variable from the build environment.
                           </span>
                         </p>
+                      )}
+                    </div>
+
+                    <div className="space-y-3 border-t border-border pt-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-medium">Publish target</p>
+                          <p className="text-xs text-muted-foreground">
+                            {showTargetEditor
+                              ? "Stored in this browser only — nothing is committed."
+                              : isRepoConfigured(repoConfig)
+                                ? "Set. The owner, repository and branch are not displayed on this screen."
+                                : "Not set yet — press Change target to fill it in once."}
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setShowTargetEditor((value) => !value)}
+                        >
+                          <Settings2 className="h-3 w-3" />
+                          {showTargetEditor ? "Hide target" : "Change target"}
+                        </Button>
+                      </div>
+                      {showTargetEditor && (
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div className="space-y-2">
+                            <Label htmlFor="repoOwner">Owner</Label>
+                            <Input
+                              id="repoOwner"
+                              value={repoConfig.owner}
+                              onChange={(event) => updateRepoConfig({ owner: event.target.value })}
+                              className="bg-input border-border"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="repoName">Repository</Label>
+                            <Input
+                              id="repoName"
+                              value={repoConfig.repo}
+                              onChange={(event) => updateRepoConfig({ repo: event.target.value })}
+                              className="bg-input border-border"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="repoBranch">Branch</Label>
+                            <Input
+                              id="repoBranch"
+                              value={repoConfig.branch}
+                              onChange={(event) => updateRepoConfig({ branch: event.target.value })}
+                              className="bg-input border-border"
+                            />
+                          </div>
+                        </div>
                       )}
                     </div>
                   </div>

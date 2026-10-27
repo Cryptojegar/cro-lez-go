@@ -86,14 +86,20 @@ share-ready link for clients.
 - `/oramune` is rendered by the `ReviewView` route (full-screen review);
   `/oramune.html` works as a direct link as well.
 
-Publishing uses the GitHub Contents API, so publishing needs a token: open
-**GitHub settings** on the upload page and press **Connect** — the token is typed
-once into a prompt, kept in the browser's `localStorage` only, never rendered on
-the page and never committed. Create a fine-grained token with
+Publishing uses the GitHub Contents API, so publishing needs a token and a target
+repository: on the upload page open **Settings** and press **Connect** — the token
+is typed once into a prompt, kept in the browser's `localStorage` only, never
+rendered on the page and never committed. Create a fine-grained token with
 **Contents: Read and write** for this repository at
 `github.com/settings/personal-access-tokens/new`. "Forget" removes it from the
 browser again. After publishing, the site redeploys (Lovable Publish or your host)
 and the link is live for clients.
+
+The owner / repository / branch are **not hardcoded** and are never displayed:
+they are stored in `localStorage` too, and are only typed when you press
+**Settings → Change target** (a first publish without a target opens that editor).
+This keeps those names out of the public JavaScript bundle as well as off the
+screen — so nothing but the token prompt ever shows account details.
 
 Do **not** put the token in a `.env` file: Vite inlines `VITE_*` variables into the
 public JavaScript bundle, so a token there is readable by anyone who visits the

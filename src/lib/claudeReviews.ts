@@ -22,11 +22,19 @@ export interface RepoConfig {
   branch: string;
 }
 
+/**
+ * Nothing is hardcoded on purpose: the publish target is entered once in the
+ * browser (localStorage) so the owner/repository names never appear in the
+ * public JavaScript bundle or on screen.
+ */
 export const DEFAULT_REPO: RepoConfig = {
-  owner: "Cryptojegar",
-  repo: "cro-lez-go",
+  owner: "",
+  repo: "",
   branch: "main",
 };
+
+export const isRepoConfigured = (config: RepoConfig): boolean =>
+  Boolean(config.owner.trim() && config.repo.trim() && config.branch.trim());
 
 /** Manifest is committed next to the reviews inside `public/`. */
 export const MANIFEST_FILE = "claude-reviews.json";
