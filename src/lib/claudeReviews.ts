@@ -45,6 +45,19 @@ export const RESERVED_SLUGS = [
 const CONFIG_KEY = "claude-review-repo-config";
 const TOKEN_KEY = "claude-review-github-token";
 
+/**
+ * Optional build-time fallback token. `VITE_*` variables are inlined into the
+ * JavaScript bundle, so this value is PUBLIC: anyone can read it from the
+ * deployed site. It only exists for throwaway internal setups — a token typed
+ * into the browser (localStorage, set through the "Connect" prompt) always wins
+ * and is the recommended path.
+ */
+const ENV_TOKEN = ((import.meta.env.VITE_GITHUB_TOKEN as string | undefined) ?? "").trim();
+
+export type TokenSource = "browser" | "env" | "none";
+
+const storedToken = (): string => localStorage.getItem(TOKEN_KEY)?.trim() ?? "";
+
 export const MAX_REVIEW_BYTES = 15 * 1024 * 1024; // 15 MB
 
 /* -------------------------------------------------------------------------- */
@@ -97,7 +110,13 @@ export const saveRepoConfig = (config: RepoConfig): void => {
   localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
 };
 
-export const getToken = (): string => localStorage.getItem(TOKEN_KEY) ?? "";
+export const getToken = (): string => storedToken() || ENV_TOKEN;
+
+export const tokenSource = (): TokenSource => {
+  if (storedToken()) return "browser";
+  if (ENV_TOKEN) return "env";
+  return "none";
+};
 
 export const saveToken = (token: string): void => {
   const trimmed = token.trim();

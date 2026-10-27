@@ -86,11 +86,19 @@ share-ready link for clients.
 - `/oramune` is rendered by the `ReviewView` route (full-screen review);
   `/oramune.html` works as a direct link as well.
 
-Publishing uses the GitHub Contents API, so the first publish needs a fine-grained
-personal access token with **Contents: Read and write** for this repository
-(create one at `github.com/settings/personal-access-tokens/new`). The token is kept
-in the browser's `localStorage` only and is never committed. After publishing, the
-site redeploys (Lovable Publish or your host) and the link is live for clients.
+Publishing uses the GitHub Contents API, so publishing needs a token: open
+**GitHub settings** on the upload page and press **Connect** — the token is typed
+once into a prompt, kept in the browser's `localStorage` only, never rendered on
+the page and never committed. Create a fine-grained token with
+**Contents: Read and write** for this repository at
+`github.com/settings/personal-access-tokens/new`. "Forget" removes it from the
+browser again. After publishing, the site redeploys (Lovable Publish or your host)
+and the link is live for clients.
+
+Do **not** put the token in a `.env` file: Vite inlines `VITE_*` variables into the
+public JavaScript bundle, so a token there is readable by anyone who visits the
+site. `.env` files are git-ignored, and the page shows a warning if a
+`VITE_GITHUB_TOKEN` is present in the build.
 
 The repository may be **private**: the token simply needs access to it
 (*Repository access → Only select repositories → this repo*), and the host that

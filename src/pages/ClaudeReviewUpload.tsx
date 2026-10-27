@@ -24,7 +24,7 @@ import {
   Trash2,
   UploadCloud,
 } from "lucide-react";
-import type { ClaudeReview, RepoConfig } from "@/lib/claudeReviews";
+import type { ClaudeReview, RepoConfig, TokenSource } from "@/lib/claudeReviews";
 import {
   MAX_REVIEW_BYTES,
   deleteReview,
@@ -37,6 +37,7 @@ import {
   saveToken,
   slugify,
   slugValidationError,
+  tokenSource,
 } from "@/lib/claudeReviews";
 
 const formatBytes = (bytes: number): string => {
@@ -73,6 +74,7 @@ const ClaudeReviewUpload = () => {
   const [lastPublished, setLastPublished] = useState<ClaudeReview | null>(null);
 
   const [token, setToken] = useState(() => getToken());
+  const [tokenSourceState, setTokenSourceState] = useState<TokenSource>(() => tokenSource());
   const [repoConfig, setRepoConfig] = useState<RepoConfig>(() => getRepoConfig());
   const [showSettings, setShowSettings] = useState(() => !getToken());
 
@@ -168,6 +170,42 @@ const ClaudeReviewUpload = () => {
     }
   };
 
+  const connectToken = () => {
+    const entered = window.prompt(
+      "Paste your GitHub token (fine-grained, Contents: Read and write).\nIt is stored in this browser only and is never displayed again.",
+    );
+    if (entered === null) return;
+
+    const trimmed = entered.trim();
+    if (!trimmed) {
+      toast({
+        title: "Nothing saved",
+        description: "No token was entered.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    saveToken(trimmed);
+    setToken(trimmed);
+    setTokenSourceState(tokenSource());
+    toast({
+      title: "GitHub connected",
+      description: "The token is stored in this browser only.",
+    });
+    void refreshReviews();
+  };
+
+  const forgetToken = () => {
+    saveToken("");
+    setToken(getToken());
+    setTokenSourceState(tokenSource());
+    toast({
+      title: "Token forgotten",
+      description: "Publishing and deleting stay disabled until you connect again.",
+    });
+  };
+
   const handlePublish = async () => {
     if (!html) {
       toast({
@@ -186,8 +224,8 @@ const ClaudeReviewUpload = () => {
     if (!token.trim()) {
       setShowSettings(true);
       toast({
-        title: "GitHub token required",
-        description: "Publishing writes the file into the site repository. Add a token below.",
+        title: "Connect GitHub first",
+        description: "Publishing writes the file into the site repository, so a token is needed once per browser.",
         variant: "destructive",
       });
       return;
@@ -234,7 +272,7 @@ const ClaudeReviewUpload = () => {
     if (!token.trim()) {
       setShowSettings(true);
       toast({
-        title: "GitHub token required",
+        title: "Connect GitHub first",
         description: "Deleting also updates the repository.",
         variant: "destructive",
       });
@@ -487,25 +525,55 @@ const ClaudeReviewUpload = () => {
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="githubToken" className="flex items-center gap-2">
+                      <Label className="flex items-center gap-2">
                         <KeyRound className="h-4 w-4 text-primary" />
-                        GitHub token (Contents: read &amp; write)
+                        GitHub connection
                       </Label>
-                      <Input
-                        id="githubToken"
-                        type="password"
-                        value={token}
-                        onChange={(event) => setToken(event.target.value)}
-                        placeholder="github_pat_..."
-                        autoComplete="off"
-                        className="bg-input border-border"
-                      />
+                      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-secondary/30 p-3">
+                        <Badge
+                          variant={tokenSourceState === "none" ? "destructive" : "secondary"}
+                          className="gap-1"
+                        >
+                          {tokenSourceState === "none" ? (
+                            <AlertTriangle className="h-3 w-3" />
+                          ) : (
+                            <CheckCircle2 className="h-3 w-3" />
+                          )}
+                          {tokenSourceState === "browser"
+                            ? "Connected — token saved in this browser"
+                            : tokenSourceState === "env"
+                              ? "Using build-time token"
+                              : "Not connected"}
+                        </Badge>
+                        <div className="ml-auto flex items-center gap-2">
+                          <Button type="button" size="sm" variant="outline" onClick={connectToken}>
+                            <KeyRound className="h-3 w-3" />
+                            {tokenSourceState === "none" ? "Connect" : "Replace"}
+                          </Button>
+                          {tokenSourceState === "browser" && (
+                            <Button type="button" size="sm" variant="ghost" onClick={forgetToken}>
+                              <Trash2 className="h-3 w-3" />
+                              Forget
+                            </Button>
+                          )}
+                        </div>
+                      </div>
                       <p className="text-xs text-muted-foreground">
-                        Create a fine-grained token with <em>Contents: Read and write</em> for{" "}
-                        {repoConfig.owner}/{repoConfig.repo} at
-                        github.com/settings/personal-access-tokens/new. Reviews are committed to{" "}
-                        <code>public/</code> and served to clients from there.
+                        Connect asks for a token once and keeps it in this browser's storage only —
+                        it is never shown on the page and never committed. Create a fine-grained
+                        token with <em>Contents: Read and write</em> for {repoConfig.owner}/
+                        {repoConfig.repo} at github.com/settings/personal-access-tokens/new.
                       </p>
+                      {tokenSourceState === "env" && (
+                        <p className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
+                          <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                          <span>
+                            <code>VITE_GITHUB_TOKEN</code> is compiled into the public JavaScript
+                            bundle, so anyone can read it from the deployed site. Use Connect
+                            instead and remove that variable from the build environment.
+                          </span>
+                        </p>
+                      )}
                     </div>
                   </div>
                 )}
