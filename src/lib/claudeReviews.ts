@@ -78,6 +78,7 @@ export const THUMB_DIR = "review-thumbs";
 export const RESERVED_SLUGS = [
   "domain-checkup",
   "claude-review-upload",
+  "audits",
   "index",
   "assets",
   "api",

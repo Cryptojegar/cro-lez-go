@@ -53,13 +53,13 @@ const ReviewView = () => {
       <div className="min-h-screen flex items-center justify-center bg-background px-4">
         <div className="audit-card p-8 max-w-md text-center">
           <FileWarning className="h-10 w-10 text-warning mx-auto mb-4" />
-          <h1 className="text-2xl font-bold mb-2">Review not found</h1>
+          <h1 className="text-2xl font-bold mb-2">Audit not found</h1>
           <p className="text-muted-foreground mb-6">
-            There is no Claude review published at <code className="text-primary">/{slug}</code> yet.
+            There is no audit published at <code className="text-primary">/{slug}</code> yet.
           </p>
           <div className="flex flex-col gap-2">
-            <Link to="/claude-review-upload">
-              <Button className="w-full">Upload a review</Button>
+            <Link to="/audits">
+              <Button className="w-full">Upload an audit</Button>
             </Link>
             <Link to="/">
               <Button variant="ghost" className="w-full">

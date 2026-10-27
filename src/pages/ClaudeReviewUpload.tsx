@@ -476,12 +476,12 @@ const ClaudeReviewUpload = () => {
   }, [inCat, q, statusFilter, tag, sort]);
   const canDrag = sort === "custom" && !selecting;
   const bySlug = (slug: string) => manifestRef.current.reviews.find((r) => r.slug === slug);
-  const title = cat === "all" ? "All reviews" : `${TYPES[cat]} reviews`;
+  const title = cat === "all" ? "All audits" : `${TYPES[cat]} audits`;
 
   /* ---------- slugs ---------- */
   const uniqueSlug = (wanted: string, exceptSlug?: string, alsoTaken: Set<string> = new Set()) => {
-    let base = slugify(wanted) || "review";
-    if (RESERVED_SLUGS.includes(base)) base += "-review";
+    let base = slugify(wanted) || "audit";
+    if (RESERVED_SLUGS.includes(base)) base += "-audit";
     const { reviews: list, aliases } = manifestRef.current;
     const taken = (s: string) =>
       alsoTaken.has(s) ||
@@ -529,7 +529,7 @@ const ClaudeReviewUpload = () => {
       ...manifestRef.current,
       reviews: manifestRef.current.reviews.map((r) => (sel.has(r.slug) ? { ...r, status: st, updatedAt: now } : r)),
     };
-    persist(next, `Set ${slugs.length} Claude review(s) to ${st}`, `${slugs.length} review${slugs.length === 1 ? "" : "s"} set to "${STATUS[st]}".`);
+    persist(next, `Set ${slugs.length} Claude review(s) to ${st}`, `${slugs.length} audit${slugs.length === 1 ? "" : "s"} set to "${STATUS[st]}".`);
   };
 
   /* delete with undo */
@@ -562,7 +562,7 @@ const ClaudeReviewUpload = () => {
     setPendingDelete((cur) => new Set([...cur, ...items.map((i) => i.slug)]));
     items.forEach((i) => deleteTimers.current.set(i.slug, window.setTimeout(() => commitDelete(i.slug), 6500)));
     setSel(new Set());
-    toast(`${items.length === 1 ? `"${items[0].title}"` : `${items.length} reviews`} deleted.`, {
+    toast(`${items.length === 1 ? `"${items[0].title}"` : `${items.length} audits`} deleted.`, {
       label: "Undo",
       run: () => {
         items.forEach((i) => {
@@ -636,7 +636,7 @@ const ClaudeReviewUpload = () => {
     const slug = replaceTarget.current;
     if (!file || !slug) return;
     if (!/\.html?$/i.test(file.name)) return toast("Please choose an .html file.");
-    if (file.size > MAX_REVIEW_BYTES) return toast(`Keep reviews under ${fmtSize(MAX_REVIEW_BYTES)}.`);
+    if (file.size > MAX_REVIEW_BYTES) return toast(`Keep audits under ${fmtSize(MAX_REVIEW_BYTES)}.`);
     const t = ensureReady();
     if (!t) return;
     toast("Uploading the new file…");
@@ -766,7 +766,7 @@ const ClaudeReviewUpload = () => {
         patchRow(row.id, { state: "failed", progress: 1, error: `Upload failed: ${errText(e)} Click Upload to try again.` });
       }
     }
-    if (done) toast(`${done} review${done === 1 ? "" : "s"} published. Links go live once the site redeploys.`);
+    if (done) toast(`${done} audit${done === 1 ? "" : "s"} published. Links go live once the site redeploys.`);
   };
   const uploading = queue.some((r) => r.state === "uploading");
   const readyCount = queue.filter((r) => r.state === "ready" || (r.state === "failed" && r.info)).length;
@@ -922,13 +922,13 @@ const ClaudeReviewUpload = () => {
           <div className="ic">
             <Upload />
           </div>
-          <h2>No reviews yet</h2>
+          <h2>No audits yet</h2>
           <p>
-            Drag and drop Claude review HTML files here, or click below. Each one gets its own link, like{" "}
+            Drag and drop Claude audit HTML files here, or click below. Each one gets its own link, like{" "}
             <b>{host()}/brand-name</b>.
           </p>
           <button className="rh-btn rh-btn-primary" onClick={() => openUpload()}>
-            <Plus /> Add your first review
+            <Plus /> Add your first audit
           </button>
         </div>
       );
@@ -938,7 +938,7 @@ const ClaudeReviewUpload = () => {
           <div className="ic">
             <Search />
           </div>
-          <h2>No reviews match</h2>
+          <h2>No audits match</h2>
           <p>Try a different search or clear the filters.</p>
           <button
             className="rh-btn rh-btn-secondary"
@@ -959,7 +959,7 @@ const ClaudeReviewUpload = () => {
             <thead>
               <tr>
                 <th style={{ width: 36 }} />
-                <th>Review</th>
+                <th>Audit</th>
                 <th>Type</th>
                 <th>Status</th>
                 <th>Findings</th>
@@ -1115,7 +1115,7 @@ const ClaudeReviewUpload = () => {
             <div className="rh-kicker">Claude Review Upload</div>
             <h1>{title}</h1>
             <p>
-              {counts.all} review{counts.all === 1 ? "" : "s"} in total. Drag and drop Claude HTML files anywhere on this
+              {counts.all} audit{counts.all === 1 ? "" : "s"} in total. Drag and drop Claude HTML files anywhere on this
               page to publish them — each file name becomes the client link.
             </p>
           </div>
@@ -1136,7 +1136,7 @@ const ClaudeReviewUpload = () => {
               {selecting ? "Done selecting" : "Select"}
             </button>
             <button className="rh-btn rh-btn-primary" onClick={() => filePick.current?.click()}>
-              <Plus /> Add review
+              <Plus /> Add audit
             </button>
           </div>
         </div>
@@ -1166,7 +1166,7 @@ const ClaudeReviewUpload = () => {
               placeholder="Search by brand, website, link or tag…"
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              aria-label="Search reviews"
+              aria-label="Search audits"
             />
             <kbd>/</kbd>
           </label>
@@ -1251,15 +1251,15 @@ const ClaudeReviewUpload = () => {
         <div>{results()}</div>
       </div>
 
-      <button className="rh-fab" onClick={() => openUpload()} aria-label="Add reviews">
+      <button className="rh-fab" onClick={() => openUpload()} aria-label="Add audits">
         <Plus />
       </button>
 
       <div className={`rh-drop${dropOn ? " on" : ""}`} aria-hidden="true">
         <div className="rh-drop-box">
           <Upload />
-          <h2>Drop to publish reviews</h2>
-          <p>Claude HTML review files. We'll create a client link for each one.</p>
+          <h2>Drop to publish audits</h2>
+          <p>Claude HTML audit files. We'll create a client link for each one.</p>
         </div>
       </div>
 
@@ -1285,7 +1285,7 @@ const ClaudeReviewUpload = () => {
           style={menuPos ? { left: menuPos.left, top: menuPos.top } : { left: -9999, top: 0 }}
         >
           <a href={`/${menuReview.slug}`} target="_blank" rel="noreferrer" role="menuitem" onClick={() => setMenu(null)}>
-            <ExternalLink /> Open review
+            <ExternalLink /> Open audit
           </a>
           <button role="menuitem" onClick={() => (setMenu(null), void copyLink(menuReview.slug))}>
             <Link2 /> Copy link
@@ -1325,10 +1325,10 @@ const ClaudeReviewUpload = () => {
             onClick={() => {
               setMenu(null);
               const to: ReviewType = typeOf(menuReview) === "cro" ? "seo" : "cro";
-              quickUpdate(menuReview.slug, { type: to }, `Moved to ${TYPES[to]} reviews.`);
+              quickUpdate(menuReview.slug, { type: to }, `Moved to ${TYPES[to]} audits.`);
             }}
           >
-            <Flag /> {typeOf(menuReview) === "cro" ? "SEO reviews" : "CRO reviews"}
+            <Flag /> {typeOf(menuReview) === "cro" ? "SEO audits" : "CRO audits"}
           </button>
           <hr />
           <button role="menuitem" className="danger" onClick={() => (setMenu(null), askDelete([menuReview.slug]))}>
@@ -1341,7 +1341,7 @@ const ClaudeReviewUpload = () => {
       <Modal open={Boolean(confirmSlugs && confirmItems.length)} onClose={() => setConfirmSlugs(null)} labelledBy="rhCfTitle">
         <div className="rh-dlg-h">
           <div>
-            <h2 id="rhCfTitle">Delete {confirmItems.length === 1 ? "this review" : `${confirmItems.length} reviews`}?</h2>
+            <h2 id="rhCfTitle">Delete {confirmItems.length === 1 ? "this audit" : `${confirmItems.length} audits`}?</h2>
             <p>
               {confirmItems.length === 1 ? (
                 <>
@@ -1393,7 +1393,7 @@ const ClaudeReviewUpload = () => {
               try {
                 await enqueue(() => saveManifest(manifestRef.current, `Update Claude review: ${slug}`, repoConfig, t));
                 if (newSlug && newSlug !== slug) {
-                  toast("Moving the review to its new link…");
+                  toast("Moving the audit to its new link…");
                   const moved = await enqueue(() =>
                     renameReview({ from: slug, to: newSlug, config: repoConfig, token: t, manifest: manifestRef.current }),
                   );
@@ -1419,8 +1419,8 @@ const ClaudeReviewUpload = () => {
       }}>
         <div className="rh-dlg-h">
           <div>
-            <h2 id="rhUpTitle">Add reviews</h2>
-            <p>Drop Claude HTML review files here. We read the brand from each file and the file name becomes its link.</p>
+            <h2 id="rhUpTitle">Add audits</h2>
+            <p>Drop Claude HTML audit files here. We read the brand from each file and the file name becomes its link.</p>
           </div>
           <button
             type="button"
@@ -1445,7 +1445,7 @@ const ClaudeReviewUpload = () => {
             }}
           >
             <Upload />
-            <b>Drag and drop review files here</b>
+            <b>Drag and drop audit files here</b>
             <small>or click to choose · .html files up to {fmtSize(MAX_REVIEW_BYTES)}</small>
             <input
               type="file"
@@ -1488,7 +1488,7 @@ const ClaudeReviewUpload = () => {
                     )}
                   </div>
                   {r.info && !r.info.known && (
-                    <p className="note">This doesn't look like one of our review files. It will still upload, but check the name and category.</p>
+                    <p className="note">This doesn't look like one of our audit files. It will still upload, but check the name and category.</p>
                   )}
                   {r.state === "failed" && !r.info ? (
                     <p className="rh-err">{r.error}</p>
@@ -1496,7 +1496,7 @@ const ClaudeReviewUpload = () => {
                     <>
                       <div className="rh-grid2">
                         <label className="rh-field">
-                          <span>Review title</span>
+                          <span>Audit title</span>
                           <input value={r.name} disabled={busy} onChange={(e) => patchRow(r.id, { name: e.target.value })} />
                         </label>
                         <label className="rh-field">
@@ -1504,7 +1504,7 @@ const ClaudeReviewUpload = () => {
                           <select value={r.type} disabled={busy} onChange={(e) => patchRow(r.id, { type: e.target.value as ReviewType })}>
                             {(Object.entries(TYPES) as [ReviewType, string][]).map(([k, v]) => (
                               <option key={k} value={k}>
-                                {v} review
+                                {v} audit
                               </option>
                             ))}
                           </select>
@@ -1516,7 +1516,7 @@ const ClaudeReviewUpload = () => {
                           <span>{host()}/</span>
                           <input value={r.slug} disabled={busy} onChange={(e) => patchRow(r.id, { slug: slugify(e.target.value) })} />
                         </div>
-                        {replaces && <small>This replaces the review already published at this link.</small>}
+                        {replaces && <small>This replaces the audit already published at this link.</small>}
                       </label>
                       <div className="rh-grid2">
                         <label className="rh-field">
@@ -1563,7 +1563,7 @@ const ClaudeReviewUpload = () => {
             Close
           </button>
           <button className="rh-btn rh-btn-primary" disabled={!readyCount || uploading} onClick={() => void runUploads()}>
-            <Upload /> Upload{readyCount ? ` ${readyCount} review${readyCount === 1 ? "" : "s"}` : ""}
+            <Upload /> Upload{readyCount ? ` ${readyCount} audit${readyCount === 1 ? "" : "s"}` : ""}
           </button>
         </div>
       </Modal>
@@ -1573,7 +1573,7 @@ const ClaudeReviewUpload = () => {
         <div className="rh-dlg-h">
           <div>
             <h2 id="rhSetTitle">Settings</h2>
-            <p>Publishing writes each review into the site repository on GitHub.</p>
+            <p>Publishing writes each audit into the site repository on GitHub.</p>
           </div>
           <button type="button" className="rh-x" aria-label="Close" onClick={() => setSettingsOpen(false)}>
             <X />
@@ -1714,7 +1714,7 @@ function EditForm({
   const clean = slugify(f.slug);
   const slugNote =
     clean !== f.slug
-      ? `Will be saved as: ${clean || "review"}`
+      ? `Will be saved as: ${clean || "audit"}`
       : clean !== review.slug
         ? `New link: ${host()}/${clean}. The old link will forward here.`
         : "Lowercase letters, numbers and dashes. If you change it, the old link forwards to the new one.";
@@ -1750,7 +1750,7 @@ function EditForm({
     >
       <div className="rh-dlg-h">
         <div>
-          <h2 id="rhEditTitle">Edit review</h2>
+          <h2 id="rhEditTitle">Edit audit</h2>
           <p>Change the name, link, status and notes.</p>
         </div>
         <button type="button" className="rh-x" aria-label="Close" onClick={onClose}>
@@ -1759,7 +1759,7 @@ function EditForm({
       </div>
       <div className="rh-dlg-b">
         <label className="rh-field">
-          <span>Review title</span>
+          <span>Audit title</span>
           <input value={f.title} onChange={set("title")} required maxLength={120} />
         </label>
         <div className="rh-grid2">
@@ -1786,7 +1786,7 @@ function EditForm({
             <select value={f.type} onChange={set("type")}>
               {(Object.entries(TYPES) as [ReviewType, string][]).map(([k, v]) => (
                 <option key={k} value={k}>
-                  {v} review
+                  {v} audit
                 </option>
               ))}
             </select>
@@ -1804,7 +1804,7 @@ function EditForm({
         </div>
         <div className="rh-grid2">
           <label className="rh-field">
-            <span>Review date</span>
+            <span>Audit date</span>
             <input value={f.date} onChange={set("date")} maxLength={40} placeholder="October 2026" />
           </label>
           <label className="rh-field">

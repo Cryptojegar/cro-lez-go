@@ -11,7 +11,7 @@ interface SiteTab {
 const tabs: SiteTab[] = [
   { to: "/", label: "CRO Audit", icon: ClipboardCheck },
   { to: "/domain-checkup", label: "Domain Checkup", icon: Globe },
-  { to: "/claude-review-upload", label: "Claude Review Upload", icon: UploadCloud },
+  { to: "/audits", label: "Claude Review Upload", icon: UploadCloud },
 ];
 
 export const SiteTabs = ({ className }: { className?: string }) => (

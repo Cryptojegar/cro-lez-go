@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Index from "./pages/Index";
 import DomainCheckup from "./pages/DomainCheckup";
 import ClaudeReviewUpload from "./pages/ClaudeReviewUpload";
@@ -20,7 +20,9 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/domain-checkup" element={<DomainCheckup />} />
-          <Route path="/claude-review-upload" element={<ClaudeReviewUpload />} />
+          <Route path="/audits" element={<ClaudeReviewUpload />} />
+          {/* Old address of the same tab */}
+          <Route path="/claude-review-upload" element={<Navigate to="/audits" replace />} />
           {/* Public client-facing review pages: example.com/<slug> */}
           <Route path="/:slug" element={<ReviewView />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

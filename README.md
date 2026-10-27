@@ -74,7 +74,7 @@ Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-trick
 
 ## Claude Review Upload (client-facing HTML reviews)
 
-The **Claude Review Upload** tab (`/claude-review-upload`) lets anyone drop an HTML
+The **Claude Review Upload** tab (`/audits`, previously `/claude-review-upload`, which now redirects) lets anyone drop an HTML
 report exported from Claude (for example `oramune.html`) and turn it into a
 share-ready link for clients.
 
@@ -116,6 +116,6 @@ deployed site (`/<slug>`), and `claude-reviews.json` lists every published slug.
 
 ```sh
 npm install
-npm run dev   # http://localhost:8080/claude-review-upload
+npm run dev   # http://localhost:8080/audits
 ```
 

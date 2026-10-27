@@ -115,7 +115,7 @@ async function makeThumb(shot: string, logo: string, siteName: string, type: Rev
     g.fillStyle = "#201E1E";
     g.font = "800 44px Manrope, sans-serif";
     g.textAlign = "center";
-    g.fillText(siteName || "Review", 320, 200);
+    g.fillText(siteName || "Audit", 320, 200);
   }
   g.fillStyle = "#201E1E";
   g.font = "800 22px Manrope, sans-serif";
