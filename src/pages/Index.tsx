@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { AuditHeader } from "@/components/audit/AuditHeader";
+import { SiteTabs } from "@/components/layout/SiteTabs";
 import { ProgressBar } from "@/components/audit/ProgressBar";
 import { AuditSection } from "@/components/audit/AuditSection";
 import { PDFGenerator } from "@/components/audit/PDFGenerator";
@@ -67,6 +68,8 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8 max-w-6xl">
+        <SiteTabs />
+
         <AuditHeader 
           auditData={auditData}
           onDataChange={setAuditData}

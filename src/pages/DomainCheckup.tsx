@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,10 +15,10 @@ import {
   AlertTriangle,
   Clock,
   Database,
-  Cpu,
-  ArrowLeft
+  Cpu
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { SiteTabs } from "@/components/layout/SiteTabs";
 
 interface DomainAnalysis {
   domain: string;
@@ -156,15 +155,8 @@ const DomainCheckup = () => {
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8 max-w-6xl">
-        {/* Back Navigation */}
-        <div className="mb-4">
-          <Link to="/">
-            <Button variant="ghost" size="sm">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to CRO Audit
-            </Button>
-          </Link>
-        </div>
+        {/* Section tabs */}
+        <SiteTabs />
 
         {/* Header */}
         <div className="audit-header rounded-lg p-8 mb-8">

@@ -71,3 +71,31 @@ Yes, you can!
 To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
 
 Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+
+## Claude Review Upload (client-facing HTML reviews)
+
+The **Claude Review Upload** tab (`/claude-review-upload`) lets anyone drop an HTML
+report exported from Claude (for example `oramune.html`) and turn it into a
+share-ready link for clients.
+
+- The file name becomes the link name: `oramune.html` → `/oramune`.
+- Reviews are published into this repository as `public/<slug>.html`, plus a small
+  `public/<slug>/index.html` redirect so `/oramune` works on any static host, and
+  `public/claude-reviews.json` keeps the list of everything that is published.
+- The upload page also lists published reviews with open / copy link / delete actions.
+- `/oramune` is rendered by the `ReviewView` route (full-screen review);
+  `/oramune.html` works as a direct link as well.
+
+Publishing uses the GitHub Contents API, so the first publish needs a fine-grained
+personal access token with **Contents: Read and write** for this repository
+(create one at `github.com/settings/personal-access-tokens/new`). The token is kept
+in the browser's `localStorage` only and is never committed. After publishing, the
+site redeploys (Lovable Publish or your host) and the link is live for clients.
+
+### Local development
+
+```sh
+npm install
+npm run dev   # http://localhost:8080/claude-review-upload
+```
+

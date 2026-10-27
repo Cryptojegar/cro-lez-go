@@ -1,0 +1,3 @@
+# Serve client-facing review links (e.g. /oramune) through the SPA router.
+# Real files (oramune.html, claude-reviews.json, ...) always win over this rule.
+/*    /index.html   200
