@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, FileWarning, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { ClaudeReview } from "@/lib/claudeReviews";
-import { loadPublishedManifest } from "@/lib/claudeReviews";
+import { loadPublishedManifestData } from "@/lib/claudeReviews";
 
 const ReviewView = () => {
   const { slug } = useParams<{ slug: string }>();
+  const navigate = useNavigate();
   const [review, setReview] = useState<ClaudeReview | null>(null);
   const [status, setStatus] = useState<"loading" | "found" | "missing">("loading");
 
@@ -15,8 +16,14 @@ const ReviewView = () => {
     const normalized = (slug ?? "").toLowerCase();
     setStatus("loading");
 
-    loadPublishedManifest().then((reviews) => {
+    loadPublishedManifestData().then(({ reviews, aliases }) => {
       if (!active) return;
+      // A renamed review: the old link forwards to the new one.
+      const forward = aliases[normalized];
+      if (forward && forward !== normalized) {
+        navigate(`/${forward}`, { replace: true });
+        return;
+      }
       const match = reviews.find((item) => item.slug === normalized) ?? null;
       setReview(match);
       setStatus(match ? "found" : "missing");
@@ -25,7 +32,7 @@ const ReviewView = () => {
     return () => {
       active = false;
     };
-  }, [slug]);
+  }, [slug, navigate]);
 
   useEffect(() => {
     if (review) document.title = review.title;

@@ -8,12 +8,40 @@
  * `/<slug>` (resolved by the ReviewView route) and `/<slug>.html`.
  */
 
+export type ReviewType = "cro" | "seo";
+export type ReviewStatus = "draft" | "ready" | "sent" | "won" | "archived";
+
+export interface ReviewStats {
+  pages?: number;
+  findings?: number;
+  critical?: number;
+}
+
 export interface ClaudeReview {
   slug: string;
   title: string;
   file: string;
   uploadedAt: string;
   size?: number;
+  /* Hub details — all optional so older manifests keep working. */
+  updatedAt?: string;
+  brand?: string;
+  domain?: string;
+  date?: string;
+  type?: ReviewType;
+  status?: ReviewStatus;
+  tags?: string[];
+  notes?: string;
+  stats?: ReviewStats;
+  /** Preview image path inside `public/`, e.g. `review-thumbs/oramune.jpg`. */
+  thumb?: string;
+  origName?: string;
+}
+
+/** Reviews in their custom order, plus old link names that forward to new ones. */
+export interface ReviewManifest {
+  reviews: ClaudeReview[];
+  aliases: Record<string, string>;
 }
 
 export interface RepoConfig {
@@ -40,6 +68,12 @@ export const isRepoConfigured = (config: RepoConfig): boolean =>
 export const MANIFEST_FILE = "claude-reviews.json";
 export const MANIFEST_REPO_PATH = `public/${MANIFEST_FILE}`;
 
+/**
+ * Preview images are separate files so the manifest stays small (the Contents
+ * API only inlines files up to 1 MB).
+ */
+export const THUMB_DIR = "review-thumbs";
+
 /** Slugs that would collide with the app's own routes. */
 export const RESERVED_SLUGS = [
   "domain-checkup",
@@ -48,6 +82,7 @@ export const RESERVED_SLUGS = [
   "assets",
   "api",
   "claude-reviews",
+  THUMB_DIR,
 ];
 
 const CONFIG_KEY = "claude-review-repo-config";
@@ -136,8 +171,7 @@ export const saveToken = (token: string): void => {
 /* GitHub Contents API                                                        */
 /* -------------------------------------------------------------------------- */
 
-const base64Encode = (text: string): string => {
-  const bytes = new TextEncoder().encode(text);
+const bytesToBase64 = (bytes: Uint8Array): string => {
   let binary = "";
   const chunkSize = 0x8000;
   for (let i = 0; i < bytes.length; i += chunkSize) {
@@ -145,6 +179,8 @@ const base64Encode = (text: string): string => {
   }
   return btoa(binary);
 };
+
+const base64Encode = (text: string): string => bytesToBase64(new TextEncoder().encode(text));
 
 const base64Decode = (value: string): string => {
   const binary = atob(value.replace(/\s/g, ""));
@@ -225,9 +261,25 @@ export const readRepoFile = async (
   return { sha: data.sha, text: data.content ? base64Decode(data.content) : "" };
 };
 
-export const writeRepoFile = async (
+/** Reads a file's raw bytes, including files over 1 MB. */
+const readRepoRawResponse = async (
   path: string,
-  text: string,
+  config: RepoConfig,
+  token: string,
+): Promise<Response | null> => {
+  const response = await fetch(
+    `${contentsUrl(config, path)}?ref=${encodeURIComponent(config.branch)}`,
+    { headers: { ...githubHeaders(token), Accept: "application/vnd.github.raw+json" } },
+  );
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(await apiError(response, `Could not read ${path}`));
+  return response;
+};
+
+/** Writes content that is already base64 encoded (used for preview images). */
+export const writeRepoBase64 = async (
+  path: string,
+  content: string,
   message: string,
   config: RepoConfig = getRepoConfig(),
   token: string = getToken(),
@@ -243,7 +295,7 @@ export const writeRepoFile = async (
     headers: { ...githubHeaders(token), "Content-Type": "application/json" },
     body: JSON.stringify({
       message,
-      content: base64Encode(text),
+      content,
       branch: config.branch,
       ...(existing ? { sha: existing.sha } : {}),
     }),
@@ -251,6 +303,14 @@ export const writeRepoFile = async (
 
   if (!response.ok) throw new Error(await apiError(response, `Could not publish ${path}`));
 };
+
+export const writeRepoFile = async (
+  path: string,
+  text: string,
+  message: string,
+  config: RepoConfig = getRepoConfig(),
+  token: string = getToken(),
+): Promise<void> => writeRepoBase64(path, base64Encode(text), message, config, token);
 
 export const deleteRepoFile = async (
   path: string,
@@ -278,78 +338,126 @@ export const deleteRepoFile = async (
 /* Manifest (the list of published reviews)                                   */
 /* -------------------------------------------------------------------------- */
 
-const parseManifest = (raw: string): ClaudeReview[] => {
-  const parsed = JSON.parse(raw) as ClaudeReview[] | { reviews?: ClaudeReview[] };
+const emptyManifest = (): ReviewManifest => ({ reviews: [], aliases: {} });
+
+/** Keeps the stored order: that is the custom order the hub shows. */
+const parseManifestData = (raw: string): ReviewManifest => {
+  const parsed = JSON.parse(raw) as
+    | ClaudeReview[]
+    | { reviews?: ClaudeReview[]; aliases?: Record<string, string> };
   const list = Array.isArray(parsed) ? parsed : parsed?.reviews ?? [];
-  return list
-    .filter((item): item is ClaudeReview =>
-      Boolean(item && typeof item.slug === "string" && typeof item.file === "string"),
-    )
-    .map((item) => ({ ...item, title: item.title || item.slug }))
-    .sort((a, b) => (b.uploadedAt ?? "").localeCompare(a.uploadedAt ?? ""));
+  const aliases = Array.isArray(parsed) ? {} : parsed?.aliases ?? {};
+  return {
+    reviews: list
+      .filter((item): item is ClaudeReview =>
+        Boolean(item && typeof item.slug === "string" && typeof item.file === "string"),
+      )
+      .map((item) => ({ ...item, title: item.title || item.slug })),
+    aliases: aliases && typeof aliases === "object" ? { ...aliases } : {},
+  };
 };
 
 /** Reads the manifest deployed with the site (used by client-facing pages). */
-export const loadPublishedManifest = async (): Promise<ClaudeReview[]> => {
+export const loadPublishedManifestData = async (): Promise<ReviewManifest> => {
   try {
     const response = await fetch(`/${MANIFEST_FILE}`, { cache: "no-store" });
-    if (!response.ok) return [];
-    return parseManifest(await response.text());
+    if (!response.ok) return emptyManifest();
+    return parseManifestData(await response.text());
   } catch {
-    return [];
+    return emptyManifest();
   }
 };
 
+export const loadPublishedManifest = async (): Promise<ClaudeReview[]> =>
+  (await loadPublishedManifestData()).reviews;
+
 /** Reads the manifest straight from the repository (always up to date). */
-export const loadRepoManifest = async (
+export const loadRepoManifestData = async (
   config: RepoConfig = getRepoConfig(),
   token: string = getToken(),
-): Promise<ClaudeReview[]> => {
+): Promise<ReviewManifest> => {
   try {
-    const remote = await readRepoFile(MANIFEST_REPO_PATH, config, token);
-    if (remote) return parseManifest(remote.text);
+    if (isRepoConfigured(config)) {
+      const remote = await readRepoFile(MANIFEST_REPO_PATH, config, token);
+      if (remote) return parseManifestData(remote.text);
+    }
   } catch {
     /* fall back to the deployed copy below */
   }
-  return loadPublishedManifest();
+  return loadPublishedManifestData();
 };
 
-const saveManifest = async (
-  reviews: ClaudeReview[],
+export const loadRepoManifest = async (
+  config: RepoConfig = getRepoConfig(),
+  token: string = getToken(),
+): Promise<ClaudeReview[]> => (await loadRepoManifestData(config, token)).reviews;
+
+export const saveManifest = async (
+  manifest: ReviewManifest,
   message: string,
-  config: RepoConfig,
-  token: string,
+  config: RepoConfig = getRepoConfig(),
+  token: string = getToken(),
 ): Promise<void> => {
-  const payload = `${JSON.stringify({ reviews }, null, 2)}\n`;
+  const payload = `${JSON.stringify(
+    { reviews: manifest.reviews, aliases: manifest.aliases },
+    null,
+    2,
+  )}\n`;
   await writeRepoFile(MANIFEST_REPO_PATH, payload, message, config, token);
 };
+
+export const thumbPath = (slug: string): string => `${THUMB_DIR}/${slug}.jpg`;
+
+/** Strips the `data:image/jpeg;base64,` prefix from a canvas data URL. */
+const dataUrlBase64 = (dataUrl: string): string => dataUrl.slice(dataUrl.indexOf(",") + 1);
+
+export type ReviewDetails = Partial<
+  Omit<ClaudeReview, "slug" | "file" | "uploadedAt" | "size" | "thumb">
+>;
 
 export interface PublishReviewInput {
   html: string;
   slug: string;
   title?: string;
+  details?: ReviewDetails;
+  /** JPEG data URL of the preview image. */
+  thumbDataUrl?: string;
   config?: RepoConfig;
   token?: string;
-  existing?: ClaudeReview[];
+  manifest?: ReviewManifest;
 }
 
+/**
+ * Publishes (or replaces) a review: the HTML, the `/<slug>` redirect stub, an
+ * optional preview image and the manifest. Replacing keeps the review's place
+ * in the custom order and its existing details unless new ones are given.
+ */
 export const publishReview = async ({
   html,
   slug,
   title,
+  details = {},
+  thumbDataUrl,
   config = getRepoConfig(),
   token = getToken(),
-  existing,
-}: PublishReviewInput): Promise<ClaudeReview> => {
+  manifest,
+}: PublishReviewInput): Promise<{ review: ClaudeReview; manifest: ReviewManifest }> => {
   const validationError = slugValidationError(slug);
   if (validationError) throw new Error(validationError);
   if (!html.trim()) throw new Error("The HTML file is empty.");
 
+  const current = manifest ?? (await loadRepoManifestData(config, token));
+  const previous = current.reviews.find((item) => item.slug === slug);
+  const now = new Date().toISOString();
+
   const review: ClaudeReview = {
+    ...previous,
+    ...details,
     slug,
-    title: (title || slug).trim(),
+    title: (title || details.title || previous?.title || slug).trim(),
     file: `${slug}.html`,
-    uploadedAt: new Date().toISOString(),
+    uploadedAt: previous?.uploadedAt ?? now,
+    updatedAt: now,
     size: new Blob([html]).size,
   };
 
@@ -369,36 +477,128 @@ export const publishReview = async ({
     token,
   );
 
-  const current = (existing ?? (await loadRepoManifest(config, token))).filter(
-    (item) => item.slug !== slug,
-  );
-  await saveManifest(
-    [review, ...current].sort((a, b) =>
-      (b.uploadedAt ?? "").localeCompare(a.uploadedAt ?? ""),
-    ),
-    `Update Claude review manifest (${slug})`,
+  if (thumbDataUrl) {
+    await writeRepoBase64(
+      `public/${thumbPath(slug)}`,
+      dataUrlBase64(thumbDataUrl),
+      `Add preview image for Claude review: ${slug}`,
+      config,
+      token,
+    );
+    review.thumb = thumbPath(slug);
+  }
+
+  const aliases = { ...current.aliases };
+  delete aliases[slug];
+  const next: ReviewManifest = {
+    reviews: previous
+      ? current.reviews.map((item) => (item.slug === slug ? review : item))
+      : [review, ...current.reviews],
+    aliases,
+  };
+  await saveManifest(next, `Update Claude review manifest (${slug})`, config, token);
+
+  return { review, manifest: next };
+};
+
+export interface RenameReviewInput {
+  from: string;
+  to: string;
+  config?: RepoConfig;
+  token?: string;
+  manifest: ReviewManifest;
+}
+
+/**
+ * Moves a review to a new link name. The old link keeps working: its redirect
+ * stub now points at the new file and the manifest remembers the alias.
+ */
+export const renameReview = async ({
+  from,
+  to,
+  config = getRepoConfig(),
+  token = getToken(),
+  manifest,
+}: RenameReviewInput): Promise<ReviewManifest> => {
+  const validationError = slugValidationError(to);
+  if (validationError) throw new Error(validationError);
+  const review = manifest.reviews.find((item) => item.slug === from);
+  if (!review) throw new Error("That review no longer exists.");
+  if (from === to) return manifest;
+
+  let html: string | null = null;
+  const remote = await readRepoRawResponse(`public/${review.file}`, config, token).catch(() => null);
+  if (remote) html = await remote.text();
+  if (html === null) {
+    const response = await fetch(`/${review.file}`, { cache: "no-store" });
+    if (!response.ok) throw new Error(`Could not read ${review.file} to move it.`);
+    html = await response.text();
+  }
+
+  const moved: ClaudeReview = {
+    ...review,
+    slug: to,
+    file: `${to}.html`,
+    updatedAt: new Date().toISOString(),
+  };
+
+  await writeRepoFile(`public/${moved.file}`, html, `Move Claude review: ${from} -> ${to}`, config, token);
+  await writeRepoFile(
+    `public/${to}/index.html`,
+    redirectStub(to, moved.title),
+    `Add /${to} redirect for Claude review`,
     config,
     token,
   );
+  // The old /<from> stub now forwards to the new file.
+  await writeRepoFile(
+    `public/${from}/index.html`,
+    redirectStub(to, moved.title),
+    `Forward /${from} to /${to}`,
+    config,
+    token,
+  );
+  await deleteRepoFile(`public/${review.file}`, `Remove old Claude review file: ${from}`, config, token);
 
-  return review;
+  if (review.thumb) {
+    const image = await readRepoRawResponse(`public/${review.thumb}`, config, token).catch(() => null);
+    if (image) {
+      const content = bytesToBase64(new Uint8Array(await image.arrayBuffer()));
+      await writeRepoBase64(`public/${thumbPath(to)}`, content, `Move preview image: ${from} -> ${to}`, config, token);
+      await deleteRepoFile(`public/${review.thumb}`, `Remove old preview image: ${from}`, config, token);
+      moved.thumb = thumbPath(to);
+    } else {
+      delete moved.thumb;
+    }
+  }
+
+  const aliases = { ...manifest.aliases, [from]: to };
+  for (const key of Object.keys(aliases)) if (aliases[key] === from) aliases[key] = to;
+  delete aliases[to];
+
+  const next: ReviewManifest = {
+    reviews: manifest.reviews.map((item) => (item.slug === from ? moved : item)),
+    aliases,
+  };
+  await saveManifest(next, `Update Claude review manifest (${from} -> ${to})`, config, token);
+  return next;
 };
 
 export interface DeleteReviewInput {
   slug: string;
   config?: RepoConfig;
   token?: string;
-  existing?: ClaudeReview[];
+  manifest?: ReviewManifest;
 }
 
 export const deleteReview = async ({
   slug,
   config = getRepoConfig(),
   token = getToken(),
-  existing,
-}: DeleteReviewInput): Promise<void> => {
-  const current = existing ?? (await loadRepoManifest(config, token));
-  const review = current.find((item) => item.slug === slug);
+  manifest,
+}: DeleteReviewInput): Promise<ReviewManifest> => {
+  const current = manifest ?? (await loadRepoManifestData(config, token));
+  const review = current.reviews.find((item) => item.slug === slug);
 
   if (review) {
     await deleteRepoFile(
@@ -413,12 +613,25 @@ export const deleteReview = async ({
       config,
       token,
     );
+    if (review.thumb) {
+      await deleteRepoFile(`public/${review.thumb}`, `Remove preview image: ${slug}`, config, token);
+    }
   }
 
-  await saveManifest(
-    current.filter((item) => item.slug !== slug),
-    `Update Claude review manifest (removed ${slug})`,
-    config,
-    token,
-  );
+  // Old link names that forwarded here stop working too.
+  const aliases: Record<string, string> = {};
+  for (const [from, to] of Object.entries(current.aliases)) {
+    if (to === slug) {
+      await deleteRepoFile(`public/${from}/index.html`, `Remove /${from} forward`, config, token);
+    } else {
+      aliases[from] = to;
+    }
+  }
+
+  const next: ReviewManifest = {
+    reviews: current.reviews.filter((item) => item.slug !== slug),
+    aliases,
+  };
+  await saveManifest(next, `Update Claude review manifest (removed ${slug})`, config, token);
+  return next;
 };
