@@ -264,3 +264,11 @@ dialog.rh-dlg[open] { animation: rh-pop .2s ease; }
 .rh[data-theme="dark"] .rh-toast { background: #F8F9FA; color: #201E1E; }
 
 @media (prefers-reduced-motion: reduce) { .rh *, .rh *::before, .rh *::after { animation: none !important; transition: none !important; } }
+
+/* tab password */
+.rh-gate { max-width: 420px; margin: 72px auto 120px; padding: 32px; }
+.rh-gate h1 { font-size: 26px; font-weight: 800; margin: 14px 0 6px; }
+.rh-gate > p { margin: 0 0 18px; color: var(--color-text-2); }
+.rh-gate .rh-err { margin: -6px 0 10px; }
+.rh-empty-ic { width: 48px; height: 48px; border-radius: 12px; display: grid; place-items: center; background: color-mix(in srgb, var(--color-yellow) 30%, transparent); }
+.rh-empty-ic svg { width: 24px; height: 24px; }

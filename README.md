@@ -72,50 +72,35 @@ To connect a domain, navigate to Project > Settings > Domains and click Connect 
 
 Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
 
-## Claude Review Upload (client-facing HTML reviews)
+## Audits tab (client-facing HTML audits)
 
-The **Claude Review Upload** tab (`/audits`, previously `/claude-review-upload`, which now redirects) lets anyone drop an HTML
-report exported from Claude (for example `oramune.html`) and turn it into a
-share-ready link for clients.
+The **Audits** tab (`/audits`; the old `/claude-review-upload` redirects) lets the team drop
+HTML audits exported from Claude and get a share-ready client link. The file name becomes
+the link: `oramune.html` → `/oramune`. The tab asks for the internal password once per browser.
 
-- The file name becomes the link name: `oramune.html` → `/oramune`.
-- Reviews are published into this repository as `public/<slug>.html`, plus a small
-  `public/<slug>/index.html` redirect so `/oramune` works on any static host, and
-  `public/claude-reviews.json` keeps the list of everything that is published.
-- The upload page also lists published reviews with open / copy link / delete actions.
-- `/oramune` is rendered by the `ReviewView` route (full-screen review);
-  `/oramune.html` works as a direct link as well.
+How it works:
 
-Publishing uses the GitHub Contents API, so publishing needs a token and a target
-repository: on the upload page open **Settings** and press **Connect** — the token
-is typed once into a prompt, kept in the browser's `localStorage` only, never
-rendered on the page and never committed. Create a fine-grained token with
-**Contents: Read and write** for this repository at
-`github.com/settings/personal-access-tokens/new`. "Forget" removes it from the
-browser again. After publishing, the site redeploys (Lovable Publish or your host)
-and the link is live for clients.
+- The site runs with `npm start` (`server.mjs`), which serves the built app and a small `/api`.
+- The GitHub token is a **server-side environment variable** — it never reaches the browser.
+  Uploads go through `/api` into this repository (`public/<slug>.html`, a `public/<slug>/index.html`
+  redirect, a preview image in `public/review-thumbs/`, and the list in `public/claude-reviews.json`).
+- Published audits are served straight from GitHub, so a new link works immediately — no redeploy needed.
+  This also works while the repository is private.
 
-The owner / repository / branch are **not hardcoded** and are never displayed:
-they are stored in `localStorage` too, and are only typed when you press
-**Settings → Change target** (a first publish without a target opens that editor).
-This keeps those names out of the public JavaScript bundle as well as off the
-screen — so nothing but the token prompt ever shows account details.
+### Dokploy environment
 
-Do **not** put the token in a `.env` file: Vite inlines `VITE_*` variables into the
-public JavaScript bundle, so a token there is readable by anyone who visits the
-site. `.env` files are git-ignored, and the page shows a warning if a
-`VITE_GITHUB_TOKEN` is present in the build.
+```
+GITHUB_TOKEN=ghp_...            # classic token with the "repo" scope (or fine-grained: Contents read & write)
+GITHUB_REPO=Cryptojegar/cro-lez-go
+GITHUB_BRANCH=main
+PORT=3000
+```
 
-The repository may be **private**: the token simply needs access to it
-(*Repository access → Only select repositories → this repo*), and the host that
-builds the site needs read access to the same repo. Note that repository privacy
-does **not** make the reviews private — a published review is a public page on the
-deployed site (`/<slug>`), and `claude-reviews.json` lists every published slug.
+Do **not** use `VITE_` names for the token: those are compiled into the public JavaScript.
 
 ### Local development
 
 ```sh
 npm install
-npm run dev   # http://localhost:8080/audits
+npm run dev   # http://localhost:8080/audits — put the variables above in .env.local
 ```
-

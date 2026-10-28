@@ -11,7 +11,7 @@ import {
   FileText,
   Flag,
   GripVertical,
-  KeyRound,
+  Lock,
   LayoutGrid,
   Link2,
   List,
@@ -30,28 +30,23 @@ import {
 } from "lucide-react";
 import type {
   ClaudeReview,
-  RepoConfig,
   ReviewManifest,
   ReviewStatus,
   ReviewType,
-  TokenSource,
+  ServerState,
 } from "@/lib/claudeReviews";
 import {
   MAX_REVIEW_BYTES,
   RESERVED_SLUGS,
   deleteReview,
-  getRepoConfig,
-  getToken,
-  isRepoConfigured,
+  forgetLegacyBrowserToken,
+  getServerState,
   loadRepoManifestData,
   publishReview,
   renameReview,
   reviewShareUrl,
   saveManifest,
-  saveRepoConfig,
-  saveToken,
   slugify,
-  tokenSource,
 } from "@/lib/claudeReviews";
 import type { ReviewInfo } from "@/lib/reviewInspect";
 import { inspectReview } from "@/lib/reviewInspect";
@@ -78,6 +73,9 @@ type View = "grid" | "list";
 type Theme = "light" | "dark";
 
 const THUMBS_KEY = "claude-review-thumbs";
+/** Simple gate for this internal tab (front-end only, not a security boundary). */
+const TAB_PASSWORD = "magtest";
+const GATE_KEY = "audits-tab-unlocked";
 const ls = {
   get: (k: string, d: string) => {
     try {
@@ -209,12 +207,23 @@ const ClaudeReviewUpload = () => {
   const [localThumbs, setLocalThumbs] = useState<Record<string, string>>(loadLocalThumbs);
   const thumbTried = useRef(new Set<string>());
 
-  /* GitHub connection */
-  const [token, setToken] = useState(() => getToken());
-  const [tokenSourceState, setTokenSourceState] = useState<TokenSource>(() => tokenSource());
-  const [repoConfig, setRepoConfig] = useState<RepoConfig>(() => getRepoConfig());
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [showTargetEditor, setShowTargetEditor] = useState(false);
+  /* tab password (internal use) and server status — the GitHub token lives on the server */
+  const [unlocked, setUnlocked] = useState(() => ls.get(GATE_KEY, "") === "1");
+  const [gatePw, setGatePw] = useState("");
+  const [gateErr, setGateErr] = useState("");
+  const [server, setServer] = useState<ServerState>({ available: true, configured: true });
+  useEffect(() => {
+    forgetLegacyBrowserToken(); // older versions kept a GitHub token in the browser
+    void getServerState().then(setServer);
+  }, []);
+  const unlock = () => {
+    if (gatePw.trim() !== TAB_PASSWORD) {
+      setGateErr("Wrong password.");
+      return;
+    }
+    ls.set(GATE_KEY, "1");
+    setUnlocked(true);
+  };
 
   /* filters */
   const params = useMemo(() => new URLSearchParams(window.location.search), []);
@@ -371,63 +380,29 @@ const ClaudeReviewUpload = () => {
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [writing, pendingDelete]);
 
-  /* ---------- GitHub connection ---------- */
-  const connectToken = (): string => {
-    const entered = window.prompt(
-      "Paste your GitHub token (fine-grained, Contents: Read and write).\nIt is stored in this browser only and is never displayed again.",
-    );
-    if (entered === null) return "";
-    const trimmed = entered.trim();
-    if (!trimmed) {
-      toast("Nothing saved — no token was entered.");
-      return "";
-    }
-    saveToken(trimmed);
-    setToken(trimmed);
-    setTokenSourceState(tokenSource());
-    toast("GitHub connected. The token is stored in this browser only.");
-    void refresh();
-    return trimmed;
+  const serverProblem = !server.available
+    ? "The upload server isn't running. The site has to be started with npm start."
+    : !server.configured
+      ? "Uploading isn't set up yet: add GITHUB_TOKEN and GITHUB_REPO to the app's environment in Dokploy, then redeploy."
+      : "";
+
+  /** True when changes can be saved; otherwise explains what's missing on the server. */
+  const ensureReady = (): boolean => {
+    if (!serverProblem) return true;
+    toast(serverProblem);
+    return false;
   };
 
-  const forgetToken = () => {
-    saveToken("");
-    setToken(getToken());
-    setTokenSourceState(tokenSource());
-    toast("Token forgotten. Publishing and editing stay off until you connect again.");
-  };
-
-  const updateRepoConfig = (patch: Partial<RepoConfig>) => {
-    setRepoConfig((current) => {
-      const next = { ...current, ...patch };
-      saveRepoConfig(next);
-      return next;
-    });
-  };
-
-  /** Returns the token to use, or "" when the target or the token is missing. */
-  const ensureReady = (): string => {
-    if (!isRepoConfigured(repoConfig)) {
-      setSettingsOpen(true);
-      setShowTargetEditor(true);
-      toast("Set the publish target once — it stays in this browser and is never shown again.");
-      return "";
-    }
-    if (token.trim()) return token.trim();
-    const t = connectToken();
-    if (!t) toast("Connect GitHub first: changes are saved into the site repository.");
-    return t;
-  };
+  const failed = (prefix: string, e: unknown) => toast(`${prefix}: ${errText(e)}`);
 
   /** Saves the manifest as it is when this write runs; reloads from GitHub if it fails. */
   const persist = (next: ReviewManifest, message: string, okMsg?: string) => {
-    const t = ensureReady();
-    if (!t) return;
+    if (!ensureReady()) return;
     setManifest(next);
-    enqueue(() => saveManifest(manifestRef.current, message, repoConfig, t))
+    enqueue(() => saveManifest(manifestRef.current, message))
       .then(() => okMsg && toast(okMsg))
       .catch((e) => {
-        toast(`Couldn't save: ${errText(e)}`);
+        failed("Couldn't save", e);
         void refresh();
       });
   };
@@ -539,11 +514,10 @@ const ClaudeReviewUpload = () => {
   };
   const commitDelete = (slug: string) => {
     deleteTimers.current.delete(slug);
-    const t = token.trim();
-    enqueue(() => deleteReview({ slug, config: repoConfig, token: t, manifest: manifestRef.current }))
+    enqueue(() => deleteReview({ slug, manifest: manifestRef.current }))
       .then((next) => setManifest(next))
       .catch((e) => {
-        toast(`Couldn't delete: ${errText(e)}`);
+        failed("Couldn't delete", e);
         void refresh();
       })
       .finally(() =>
@@ -637,8 +611,7 @@ const ClaudeReviewUpload = () => {
     if (!file || !slug) return;
     if (!/\.html?$/i.test(file.name)) return toast("Please choose an .html file.");
     if (file.size > MAX_REVIEW_BYTES) return toast(`Keep audits under ${fmtSize(MAX_REVIEW_BYTES)}.`);
-    const t = ensureReady();
-    if (!t) return;
+    if (!ensureReady()) return;
     toast("Uploading the new file…");
     try {
       const html = await file.text();
@@ -649,8 +622,6 @@ const ClaudeReviewUpload = () => {
           slug,
           details: { origName: file.name, ...(info.known ? { stats: info.stats } : {}) },
           thumbDataUrl: info.thumb || undefined,
-          config: repoConfig,
-          token: t,
           manifest: manifestRef.current,
         }),
       );
@@ -658,7 +629,7 @@ const ClaudeReviewUpload = () => {
       if (info.thumb) rememberThumb(slug, info.thumb);
       toast("File replaced. The link stays the same.");
     } catch (e) {
-      toast(`Couldn't replace the file: ${errText(e)}`);
+      failed("Couldn't replace the file", e);
     }
   };
 
@@ -722,8 +693,7 @@ const ClaudeReviewUpload = () => {
   const runUploads = async () => {
     const rows = queueRef.current.filter((r) => r.state === "ready" || (r.state === "failed" && r.info));
     if (!rows.length) return;
-    const t = ensureReady();
-    if (!t) return;
+    if (!ensureReady()) return;
     let done = 0;
     for (const row of rows) {
       const slug = slugify(row.slug);
@@ -753,8 +723,6 @@ const ClaudeReviewUpload = () => {
               origName: row.file.name,
             },
             thumbDataUrl: info.thumb || undefined,
-            config: repoConfig,
-            token: t,
             manifest: manifestRef.current,
           }),
         );
@@ -766,7 +734,7 @@ const ClaudeReviewUpload = () => {
         patchRow(row.id, { state: "failed", progress: 1, error: `Upload failed: ${errText(e)} Click Upload to try again.` });
       }
     }
-    if (done) toast(`${done} audit${done === 1 ? "" : "s"} published. Links go live once the site redeploys.`);
+    if (done) toast(`${done} audit${done === 1 ? "" : "s"} published. The link works right away.`);
   };
   const uploading = queue.some((r) => r.state === "uploading");
   const readyCount = queue.filter((r) => r.state === "ready" || (r.state === "failed" && r.info)).length;
@@ -776,7 +744,7 @@ const ClaudeReviewUpload = () => {
     let depth = 0;
     const hasFiles = (e: DragEvent) => Boolean(e.dataTransfer && [...e.dataTransfer.types].includes("Files"));
     const enter = (e: DragEvent) => {
-      if (!hasFiles(e) || uploadOpen) return;
+      if (!hasFiles(e) || uploadOpen || !unlocked) return;
       depth++;
       setDropOn(true);
     };
@@ -793,7 +761,7 @@ const ClaudeReviewUpload = () => {
       e.preventDefault();
       depth = 0;
       setDropOn(false);
-      if (!uploadOpen && e.dataTransfer) openUpload([...e.dataTransfer.files]);
+      if (!uploadOpen && unlocked && e.dataTransfer) openUpload([...e.dataTransfer.files]);
     };
     window.addEventListener("dragenter", enter);
     window.addEventListener("dragleave", leave);
@@ -1110,6 +1078,44 @@ const ClaudeReviewUpload = () => {
           </button>
         </div>
 
+        {!unlocked ? (
+          <form
+            className="rh-card rh-gate"
+            onSubmit={(e) => {
+              e.preventDefault();
+              unlock();
+            }}
+          >
+            <div className="rh-empty-ic">
+              <Lock />
+            </div>
+            <h1>Audits</h1>
+            <p>Enter the password to open this tab.</p>
+            <label className="rh-field">
+              <span>Password</span>
+              <input
+                type="password"
+                value={gatePw}
+                onChange={(e) => {
+                  setGatePw(e.target.value);
+                  setGateErr("");
+                }}
+                autoFocus
+              />
+            </label>
+            <p className="rh-err">{gateErr}</p>
+            <button className="rh-btn rh-btn-primary" style={{ width: "100%" }}>
+              Open
+            </button>
+          </form>
+        ) : (
+        <>
+        {serverProblem && (
+          <div className="rh-warn" style={{ marginTop: 16 }}>
+            <AlertTriangle />
+            <span>{serverProblem}</span>
+          </div>
+        )}
         <div className="rh-head">
           <div>
             <div className="rh-kicker">Claude Review Upload</div>
@@ -1122,9 +1128,6 @@ const ClaudeReviewUpload = () => {
           <div className="rh-head-acts">
             <button className="rh-btn rh-btn-ghost" onClick={() => void refresh()} disabled={loading} aria-label="Refresh">
               <RefreshCw /> Refresh
-            </button>
-            <button className="rh-btn rh-btn-secondary" onClick={() => setSettingsOpen(true)}>
-              <Settings2 /> Settings
             </button>
             <button
               className="rh-btn rh-btn-secondary"
@@ -1249,9 +1252,11 @@ const ClaudeReviewUpload = () => {
         )}
 
         <div>{results()}</div>
+        </>
+        )}
       </div>
 
-      <button className="rh-fab" onClick={() => openUpload()} aria-label="Add audits">
+      <button className="rh-fab" hidden={!unlocked} onClick={() => openUpload()} aria-label="Add audits">
         <Plus />
       </button>
 
@@ -1381,8 +1386,7 @@ const ClaudeReviewUpload = () => {
             }}
             uniqueSlug={uniqueSlug}
             onSave={async (changes, newSlug) => {
-              const t = ensureReady();
-              if (!t) return false;
+              if (!ensureReady()) return false;
               const now = new Date().toISOString();
               const slug = editReview.slug;
               const next = {
@@ -1391,11 +1395,11 @@ const ClaudeReviewUpload = () => {
               };
               setManifest(next);
               try {
-                await enqueue(() => saveManifest(manifestRef.current, `Update Claude review: ${slug}`, repoConfig, t));
+                await enqueue(() => saveManifest(manifestRef.current, `Update audit: ${slug}`));
                 if (newSlug && newSlug !== slug) {
                   toast("Moving the audit to its new link…");
                   const moved = await enqueue(() =>
-                    renameReview({ from: slug, to: newSlug, config: repoConfig, token: t, manifest: manifestRef.current }),
+                    renameReview({ from: slug, to: newSlug, manifest: manifestRef.current }),
                   );
                   setManifest(moved);
                   if (localThumbs[slug]) rememberThumb(newSlug, localThumbs[slug]);
@@ -1564,100 +1568,6 @@ const ClaudeReviewUpload = () => {
           </button>
           <button className="rh-btn rh-btn-primary" disabled={!readyCount || uploading} onClick={() => void runUploads()}>
             <Upload /> Upload{readyCount ? ` ${readyCount} audit${readyCount === 1 ? "" : "s"}` : ""}
-          </button>
-        </div>
-      </Modal>
-
-      {/* settings: GitHub connection and publish target */}
-      <Modal open={settingsOpen} onClose={() => setSettingsOpen(false)} labelledBy="rhSetTitle">
-        <div className="rh-dlg-h">
-          <div>
-            <h2 id="rhSetTitle">Settings</h2>
-            <p>Publishing writes each audit into the site repository on GitHub.</p>
-          </div>
-          <button type="button" className="rh-x" aria-label="Close" onClick={() => setSettingsOpen(false)}>
-            <X />
-          </button>
-        </div>
-        <div className="rh-dlg-b">
-          <div className="rh-panel">
-            <h3>GitHub connection</h3>
-            <p>
-              Connect asks for a token once and keeps it in this browser's storage only — it is never shown on the page and
-              never committed. Use a fine-grained token with <em>Contents: Read and write</em> for the publishing repository.
-            </p>
-            <div className="rh-row">
-              <span className={`rh-badge ${tokenSourceState === "none" ? "no" : "ok"}`}>
-                {tokenSourceState === "none" ? <AlertTriangle /> : <CheckCircle2 />}
-                {tokenSourceState === "browser"
-                  ? "Connected — token saved in this browser"
-                  : tokenSourceState === "env"
-                    ? "Using build-time token"
-                    : "Not connected"}
-              </span>
-              <span style={{ flex: 1 }} />
-              <button className="rh-btn rh-btn-secondary rh-btn-sm" onClick={() => connectToken()}>
-                <KeyRound /> {tokenSourceState === "none" ? "Connect" : "Replace"}
-              </button>
-              {tokenSourceState === "browser" && (
-                <button className="rh-btn rh-btn-ghost rh-btn-sm" onClick={forgetToken}>
-                  <Trash2 /> Forget
-                </button>
-              )}
-            </div>
-            {tokenSourceState === "env" && (
-              <div className="rh-warn">
-                <AlertTriangle />
-                <span>
-                  <code>VITE_GITHUB_TOKEN</code> is compiled into the public JavaScript bundle, so anyone can read it from the
-                  deployed site. Use Connect instead and remove that variable from the build environment.
-                </span>
-              </div>
-            )}
-          </div>
-          <div className="rh-panel">
-            <div className="rh-row" style={{ alignItems: "flex-start" }}>
-              <div style={{ flex: 1 }}>
-                <h3>Publish target</h3>
-                <p>
-                  {showTargetEditor
-                    ? "Stored in this browser only — nothing is committed."
-                    : isRepoConfigured(repoConfig)
-                      ? "Set. The owner, repository and branch are not displayed on this screen."
-                      : "Not set yet — press Change target to fill it in once."}
-                </p>
-              </div>
-              <button className="rh-btn rh-btn-ghost rh-btn-sm" onClick={() => setShowTargetEditor((v) => !v)}>
-                <Settings2 /> {showTargetEditor ? "Hide target" : "Change target"}
-              </button>
-            </div>
-            {showTargetEditor && (
-              <div className="rh-grid2" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))" }}>
-                <label className="rh-field">
-                  <span>Owner</span>
-                  <input value={repoConfig.owner} onChange={(e) => updateRepoConfig({ owner: e.target.value })} />
-                </label>
-                <label className="rh-field">
-                  <span>Repository</span>
-                  <input value={repoConfig.repo} onChange={(e) => updateRepoConfig({ repo: e.target.value })} />
-                </label>
-                <label className="rh-field">
-                  <span>Branch</span>
-                  <input value={repoConfig.branch} onChange={(e) => updateRepoConfig({ branch: e.target.value })} />
-                </label>
-              </div>
-            )}
-          </div>
-        </div>
-        <div className="rh-dlg-f">
-          <button
-            className="rh-btn rh-btn-primary"
-            onClick={() => {
-              setSettingsOpen(false);
-              void refresh();
-            }}
-          >
-            Done
           </button>
         </div>
       </Modal>
