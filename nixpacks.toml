@@ -1,0 +1,4 @@
+# Run the app's own server (site + Audits upload API) instead of Nixpacks'
+# default static Caddy server, which can't handle uploads.
+[start]
+cmd = "node server.mjs"
