@@ -383,7 +383,7 @@ const ClaudeReviewUpload = () => {
   const serverProblem = !server.available
     ? "The upload server isn't running. The site has to be started with npm start."
     : !server.configured
-      ? "Uploading isn't set up yet: add GITHUB_TOKEN and GITHUB_REPO to the app's environment in Dokploy, then redeploy."
+      ? "Uploading isn't set up yet: add GITHUB_TOKEN to the app's environment in Dokploy, then redeploy."
       : "";
 
   /** True when changes can be saved; otherwise explains what's missing on the server. */

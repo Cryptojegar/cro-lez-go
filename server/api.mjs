@@ -8,7 +8,7 @@
  *
  * Environment variables:
  *   GITHUB_TOKEN    fine-grained token, Contents: Read and write on the repo
- *   GITHUB_REPO     owner/repository, e.g. Cryptojegar/cro-lez-go
+ *   GITHUB_REPO     owner/repository (default: Cryptojegar/cro-lez-go)
  *   GITHUB_BRANCH   branch to publish to (default: main)
  */
 
@@ -35,9 +35,12 @@ const send = (res, status, data) => {
   res.end(JSON.stringify(data));
 };
 
+/** This site's own repository; override with GITHUB_REPO if it ever moves. */
+const DEFAULT_REPO = "Cryptojegar/cro-lez-go";
+
 export function githubConfig(env = process.env) {
   const token = (env.GITHUB_TOKEN || "").trim();
-  const repo = (env.GITHUB_REPO || "").trim().replace(/^https?:\/\/github\.com\//, "").replace(/\.git$/, "").replace(/\/$/, "");
+  const repo = (env.GITHUB_REPO || DEFAULT_REPO).trim().replace(/^https?:\/\/github\.com\//, "").replace(/\.git$/, "").replace(/\/$/, "");
   const branch = (env.GITHUB_BRANCH || "main").trim();
   return { token, repo, branch, configured: Boolean(token && /^[\w.-]+\/[\w.-]+$/.test(repo)) };
 }
@@ -66,7 +69,7 @@ export async function fetchRepoRaw(cfg, path) {
 
 export function createApiHandler(env = process.env) {
   const cfg = githubConfig(env);
-  const notSetUp = "Publishing isn't set up on the server: add GITHUB_TOKEN and GITHUB_REPO to the app's environment.";
+  const notSetUp = "Publishing isn't set up on the server: add GITHUB_TOKEN to the app's environment in Dokploy, then redeploy.";
 
   return async function handle(req, res, next) {
     const url = new URL(req.url || "/", "http://local");

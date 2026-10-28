@@ -91,5 +91,5 @@ createServer(async (req, res) => {
     res.writeHead(400).end();
   }
 }).listen(PORT, () => {
-  console.log(`Listening on port ${PORT}${gh.configured ? "" : " — uploading is off until GITHUB_TOKEN and GITHUB_REPO are set"}`);
+  console.log(`Listening on port ${PORT}${gh.configured ? "" : " — uploading is off until GITHUB_TOKEN is set"}`);
 });
